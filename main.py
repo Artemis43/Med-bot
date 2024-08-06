@@ -79,6 +79,12 @@ CREATE TABLE IF NOT EXISTS users (
 ''')
 conn.commit()
 
+cursor.execute('''
+ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0
+''')
+conn.commit()
+
+
 # Global dictionary to track the current upload folder for each user
 current_upload_folders = {}
 
@@ -89,6 +95,17 @@ def set_current_upload_folder(user_id, folder_name):
 # Function to get the current upload folder for a user
 def get_current_upload_folder(user_id):
     return current_upload_folders.get(user_id)
+
+async def notify_admins(user_id):
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"User {user_id} is requesting access to the bot. Approve? /approve_{user_id} /reject_{user_id}"
+            )
+        except exceptions.BotBlocked:
+            logging.warning(f"Admin {admin_id} has blocked the bot.")
+
 
 # Helper function to check if the user is a member of the required channels
 async def is_user_member(user_id):
@@ -162,29 +179,65 @@ def add_user_to_db(user_id):
     cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
     conn.commit()
 
-# Command to start the bot and show the UI
+
 @dp.message_handler(commands=['start'])
-async def start(message: types.Message):
+async def handle_start(message: types.Message):
     user_id = message.from_user.id
     add_user_to_db(user_id)
-    # New code with inline buttons for required channelsS
-    if not await is_user_member(user_id):
-        sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-        await asyncio.sleep(2)
-        await bot.delete_message(message.chat.id, sticker_msg.message_id)
-        #await asyncio.sleep(1)
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
-        keyboard = InlineKeyboardMarkup(row_width=1)
-        for channel in REQUIRED_CHANNELS:
-            button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
-            keyboard.add(button)
-        await message.reply(join_message, reply_markup=keyboard)
+    cursor.execute('SELECT approved FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        # Insert user with approved status 0
+        cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 0))
+        conn.commit()
+        await notify_admins(user_id)
+        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent Scammers and Copyright Strikes, we allow only Medical students to use this bot.\n\nYour access request has been sent to the admins for approval.\nYou will be contacted soon!")
+    elif user[0] == 0:
+        await message.answer("Your access request is still pending approval.")
     else:
-        sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-        await asyncio.sleep(1)
-        await bot.delete_message(message.chat.id, sticker_msg.message_id)
-        #await asyncio.sleep(1)
-        await send_ui(message.chat.id)
+        await message.answer("Welcome! You have access to the bot.")
+        if not await is_user_member(user_id):
+            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
+            await asyncio.sleep(2)
+            await bot.delete_message(message.chat.id, sticker_msg.message_id)
+            #await asyncio.sleep(1)
+            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+            keyboard = InlineKeyboardMarkup(row_width=1)
+            for channel in REQUIRED_CHANNELS:
+                button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
+                keyboard.add(button)
+            await message.reply(join_message, reply_markup=keyboard)
+        else:
+            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
+            await asyncio.sleep(1)
+            await bot.delete_message(message.chat.id, sticker_msg.message_id)
+            #await asyncio.sleep(1)
+            await send_ui(message.chat.id)
+
+@dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
+async def approve_user(message: types.Message):
+    user_id = int(message.text.split('_')[1])
+    cursor.execute('UPDATE users SET approved = 1 WHERE user_id = ?', (user_id,))
+    conn.commit()
+    await message.answer(f"User {user_id} has been approved.")
+    try:
+        await bot.send_message(user_id, "You have been approved to use the bot.")
+    except exceptions.BotBlocked:
+        logging.warning(f"User {user_id} has blocked the bot.")
+
+@dp.message_handler(lambda message: message.text.startswith('/reject_') and str(message.from_user.id) in ADMIN_IDS)
+async def reject_user(message: types.Message):
+    user_id = int(message.text.split('_')[1])
+    cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
+    conn.commit()
+    await message.answer(f"User {user_id} has been rejected.")
+    try:
+        await bot.send_message(user_id, "You have been rejected from using the bot.")
+    except exceptions.BotBlocked:
+        logging.warning(f"User {user_id} has blocked the bot.")
+       
+
 
 # Command to send a backup of the database file (Admin only)
 @dp.message_handler(commands=['backup'])
