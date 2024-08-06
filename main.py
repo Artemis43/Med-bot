@@ -107,6 +107,7 @@ async def notify_admins(user_id):
             logging.warning(f"Admin {admin_id} has blocked the bot.")
 
 
+
 # Helper function to check if the user is a member of the required channels
 async def is_user_member(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -175,9 +176,22 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         pass  # Handle the exception gracefully by ignoring it
 
 
-def add_user_to_db(user_id):
+"""def add_user_to_db(user_id):
     cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
-    conn.commit()
+    conn.commit()"""
+
+def add_user_to_db(user_id):
+    cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+    
+    if not user:
+        if str(user_id) in ADMIN_IDS:
+            # Insert admin user with approved status 1
+            cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 1))
+        else:
+            # Insert regular user with approved status 0
+            cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 0))
+        conn.commit()
 
 
 @dp.message_handler(commands=['start'])
@@ -187,21 +201,15 @@ async def handle_start(message: types.Message):
     cursor.execute('SELECT approved FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
-    if not user:
-        # Insert user with approved status 0
-        cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 0))
-        conn.commit()
+    if user[0] == 0:
         await notify_admins(user_id)
         await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent Scammers and Copyright Strikes, we allow only Medical students to use this bot.\n\nYour access request has been sent to the admins for approval.\nYou will be contacted soon!")
-    elif user[0] == 0:
-        await message.answer("Your access request is still pending approval.")
-    else:
+    elif user[0] == 1:
         await message.answer("Welcome! You have access to the bot.")
         if not await is_user_member(user_id):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
             await asyncio.sleep(2)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            #await asyncio.sleep(1)
             join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
             keyboard = InlineKeyboardMarkup(row_width=1)
             for channel in REQUIRED_CHANNELS:
@@ -212,8 +220,10 @@ async def handle_start(message: types.Message):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
             await asyncio.sleep(1)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            #await asyncio.sleep(1)
             await send_ui(message.chat.id)
+    else:
+        await message.answer("Your access request is still pending approval.")
+
 
 @dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
 async def approve_user(message: types.Message):
@@ -236,6 +246,7 @@ async def reject_user(message: types.Message):
         await bot.send_message(user_id, "You have been rejected from using the bot.")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
+
        
 
 
