@@ -177,7 +177,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     for folder in folders:
         text += f"|-📁 `{folder[0]}`\n"
 
-    text += "\n\n`Please share any files that you may think are useful to others :D`"
+    text += "\n\n`Please share any files that you may think are useful to others :D`-[Share](https://t.me/MedContent_Adminbot)"
 
     try:
         if message_id:
@@ -211,7 +211,7 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nYour access request has been sent to the admins for approval 🪄\nYou will be contacted soon!")
+        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nSend us your ID-Proof as a Medico @MedContent_Adminbot\n\nYou will be granted access only after verification!")
         await notify_admins(user_id)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 😉")
@@ -231,7 +231,7 @@ async def handle_start(message: types.Message):
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
             await send_ui(message.chat.id)
     elif user[0] == 'rejected':
-        await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, **Contact Us:** [Here](https://t.me/MedContent_Adminbot)")
+        await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
 
 
 
@@ -243,7 +243,7 @@ async def approve_user(message: types.Message):
     conn.commit()
     await message.answer(f"User {user_id} has been approved.")
     try:
-        await bot.send_message(user_id, "You have been approved to use the bot 🙌\n\nClick here 👉 /start")
+        await bot.send_message(user_id, "You have been approved to use the bot\n\nClick here 👉 /start")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
     except exceptions.ChatNotFound:
