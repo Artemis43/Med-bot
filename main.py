@@ -215,7 +215,7 @@ async def handle_start(message: types.Message):
 
     if user[0] == 'pending':
         await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nSend us your ID-Proof as a Medico @MedContent_Adminbot\n\nYou will be granted access only after verification!")
-        await notify_admins(user_id)  # Ensure this is after the initial message to the user
+        await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 😉")
         if not await is_user_member(user_id):
