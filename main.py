@@ -84,6 +84,13 @@ ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0
 ''')
 conn.commit()
 
+# Add a status column to users table
+cursor.execute('''
+ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'pending'
+''')
+conn.commit()
+
+
 
 # Global dictionary to track the current upload folder for each user
 current_upload_folders = {}
@@ -190,26 +197,23 @@ def add_user_to_db(user_id):
     user = cursor.fetchone()
     
     if not user:
-        if str(user_id) in ADMIN_IDS:
-            # Insert admin user with approved status 1
-            cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 1))
-        else:
-            # Insert regular user with approved status 0
-            cursor.execute('INSERT INTO users (user_id, approved) VALUES (?, ?)', (user_id, 0))
+        status = 'approved' if str(user_id) in ADMIN_IDS else 'pending'
+        cursor.execute('INSERT INTO users (user_id, status) VALUES (?, ?)', (user_id, status))
         conn.commit()
+
 
 
 @dp.message_handler(commands=['start'])
 async def handle_start(message: types.Message):
     user_id = message.from_user.id
     add_user_to_db(user_id)
-    cursor.execute('SELECT approved FROM users WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
-    if user[0] == 0:
+    if user[0] == 'pending':
         await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent Scammers and Copyright Strikes, we allow only Medical students to use this bot.\n\nYour access request has been sent to the admins for approval.\nYou will be contacted soon!")
         await notify_admins(user_id)  # Ensure this is after the initial message to the user
-    elif user[0] == 1:
+    elif user[0] == 'approved':
         await message.answer("Welcome! You have access to the bot.")
         if not await is_user_member(user_id):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
@@ -226,15 +230,16 @@ async def handle_start(message: types.Message):
             await asyncio.sleep(1)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
             await send_ui(message.chat.id)
-    else:
-        await message.answer("Your access request is still pending approval.")
+    elif user[0] == 'rejected':
+        await message.answer("Your access request has been rejected. You cannot use this bot.")
+
 
 
 
 @dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
 async def approve_user(message: types.Message):
     user_id = int(message.text.split('_')[1])
-    cursor.execute('UPDATE users SET approved = 1 WHERE user_id = ?', (user_id,))
+    cursor.execute('UPDATE users SET status = ? WHERE user_id = ?', ('approved', user_id))
     conn.commit()
     await message.answer(f"User {user_id} has been approved.")
     try:
@@ -249,7 +254,7 @@ async def approve_user(message: types.Message):
 @dp.message_handler(lambda message: message.text.startswith('/reject_') and str(message.from_user.id) in ADMIN_IDS)
 async def reject_user(message: types.Message):
     user_id = int(message.text.split('_')[1])
-    cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
+    cursor.execute('UPDATE users SET status = ? WHERE user_id = ?', ('rejected', user_id))
     conn.commit()
     await message.answer(f"User {user_id} has been rejected.")
     try:
@@ -260,6 +265,7 @@ async def reject_user(message: types.Message):
         logging.warning(f"User {user_id} chat not found.")
     except Exception as e:
         logging.error(f"Error sending rejection message to user {user_id}: {e}")
+
 
 
        
