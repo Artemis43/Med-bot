@@ -103,12 +103,13 @@ def set_current_upload_folder(user_id, folder_name):
 def get_current_upload_folder(user_id):
     return current_upload_folders.get(user_id)
 
-async def notify_admins(user_id):
+async def notify_admins(user_id, username):
+    username = username or "N/A"  # Use "N/A" if the username is None
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
                 admin_id,
-                f"User {user_id} is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
+                f"User @{username} (ID: {user_id}) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
             )
         except exceptions.BotBlocked:
             logging.warning(f"Admin {admin_id} has blocked the bot.")
@@ -116,6 +117,7 @@ async def notify_admins(user_id):
             logging.warning(f"Admin {admin_id} chat not found.")
         except Exception as e:
             logging.error(f"Error sending message to admin {admin_id}: {e}")
+
 
 
 
@@ -206,6 +208,7 @@ def add_user_to_db(user_id):
 @dp.message_handler(commands=['start'])
 async def handle_start(message: types.Message):
     user_id = message.from_user.id
+    username = message.from_user.username
     add_user_to_db(user_id)
     cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
