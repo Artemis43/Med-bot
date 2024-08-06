@@ -179,7 +179,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     for folder in folders:
         text += f"|-📁 `{folder[0]}`\n"
 
-    text += "\n\n`Please share any files that you may think are useful to others :D`-[Share](https://t.me/MedContent_Adminbot)"
+    text += "\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
     try:
         if message_id:
