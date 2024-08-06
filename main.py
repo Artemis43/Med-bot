@@ -108,7 +108,7 @@ async def notify_admins(user_id):
         try:
             await bot.send_message(
                 admin_id,
-                f"User {user_id} is requesting access to the bot. Approve? /approve_{user_id} /reject_{user_id}"
+                f"User {user_id} is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
             )
         except exceptions.BotBlocked:
             logging.warning(f"Admin {admin_id} has blocked the bot.")
@@ -166,7 +166,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         #f"**New game added every 3 hrs! Report to admin of any issues 👾**\n\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
-        f"**List of Folders:**\n\n"
+        f"**List of Folders 🔽**\n\n"
     )
 
     # Fetch and list folders in alphabetical order
@@ -175,9 +175,9 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
 
     # Add folders to the text
     for folder in folders:
-        text += f"|-📁 `{folder[0]}`\n\n"
+        text += f"|-📁 `{folder[0]}`\n"
 
-    #text += "`⬇ Report if no files`"
+    text += "\n\n`Please share any files that you may think are useful to others :D`"
 
     try:
         if message_id:
@@ -211,10 +211,10 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent Scammers and Copyright Strikes, we allow only Medical students to use this bot.\n\nYour access request has been sent to the admins for approval.\nYou will be contacted soon!")
+        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nYour access request has been sent to the admins for approval 🪄\nYou will be contacted soon!")
         await notify_admins(user_id)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
-        await message.answer("Welcome! You have access to the bot.")
+        await message.answer("Welcome! You have been given access to the bot 😉")
         if not await is_user_member(user_id):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
             await asyncio.sleep(2)
@@ -231,7 +231,7 @@ async def handle_start(message: types.Message):
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
             await send_ui(message.chat.id)
     elif user[0] == 'rejected':
-        await message.answer("Your access request has been rejected. You cannot use this bot.")
+        await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, **Contact Us:** [Here](https://t.me/MedContent_Adminbot)")
 
 
 
@@ -243,7 +243,7 @@ async def approve_user(message: types.Message):
     conn.commit()
     await message.answer(f"User {user_id} has been approved.")
     try:
-        await bot.send_message(user_id, "You have been approved to use the bot.")
+        await bot.send_message(user_id, "You have been approved to use the bot 🙌\n\nClick here 👉 /start")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
     except exceptions.ChatNotFound:
@@ -258,18 +258,13 @@ async def reject_user(message: types.Message):
     conn.commit()
     await message.answer(f"User {user_id} has been rejected.")
     try:
-        await bot.send_message(user_id, "You have been rejected from using the bot.")
+        await bot.send_message(user_id, "You have been rejected from using the bot 🫤\n\nIf you think this is a mistake, **Contact Us:** [Here](https://t.me/MedContent_Adminbot)")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
     except exceptions.ChatNotFound:
         logging.warning(f"User {user_id} chat not found.")
     except Exception as e:
         logging.error(f"Error sending rejection message to user {user_id}: {e}")
-
-
-
-       
-
 
 # Command to send a backup of the database file (Admin only)
 @dp.message_handler(commands=['backup'])
