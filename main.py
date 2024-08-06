@@ -105,6 +105,11 @@ async def notify_admins(user_id):
             )
         except exceptions.BotBlocked:
             logging.warning(f"Admin {admin_id} has blocked the bot.")
+        except exceptions.ChatNotFound:
+            logging.warning(f"Admin {admin_id} chat not found.")
+        except Exception as e:
+            logging.error(f"Error sending message to admin {admin_id}: {e}")
+
 
 
 
@@ -202,8 +207,8 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 0:
-        await notify_admins(user_id)
         await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent Scammers and Copyright Strikes, we allow only Medical students to use this bot.\n\nYour access request has been sent to the admins for approval.\nYou will be contacted soon!")
+        await notify_admins(user_id)  # Ensure this is after the initial message to the user
     elif user[0] == 1:
         await message.answer("Welcome! You have access to the bot.")
         if not await is_user_member(user_id):
@@ -225,6 +230,7 @@ async def handle_start(message: types.Message):
         await message.answer("Your access request is still pending approval.")
 
 
+
 @dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
 async def approve_user(message: types.Message):
     user_id = int(message.text.split('_')[1])
@@ -235,6 +241,10 @@ async def approve_user(message: types.Message):
         await bot.send_message(user_id, "You have been approved to use the bot.")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
+    except exceptions.ChatNotFound:
+        logging.warning(f"User {user_id} chat not found.")
+    except Exception as e:
+        logging.error(f"Error sending approval message to user {user_id}: {e}")
 
 @dp.message_handler(lambda message: message.text.startswith('/reject_') and str(message.from_user.id) in ADMIN_IDS)
 async def reject_user(message: types.Message):
@@ -246,6 +256,11 @@ async def reject_user(message: types.Message):
         await bot.send_message(user_id, "You have been rejected from using the bot.")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
+    except exceptions.ChatNotFound:
+        logging.warning(f"User {user_id} chat not found.")
+    except Exception as e:
+        logging.error(f"Error sending rejection message to user {user_id}: {e}")
+
 
        
 
