@@ -168,7 +168,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         #f"**New game added every 3 hrs! Report to admin of any issues 👾**\n\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
-        f"**List of Folders 🔽**\n\n"
+        f"**List of Folders 🔽**\n\n___________________________\n\n"
     )
 
     # Fetch and list folders in alphabetical order
@@ -179,7 +179,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     for folder in folders:
         text += f"|-📒 `{folder[0]}`\n"
 
-    text += "\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
+    text += "\n\n___________________________\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
     try:
         if message_id:
@@ -222,7 +222,7 @@ async def handle_start(message: types.Message):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
             await asyncio.sleep(2)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
             keyboard = InlineKeyboardMarkup(row_width=1)
             for channel in REQUIRED_CHANNELS:
                 button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
@@ -293,10 +293,10 @@ async def help(message: types.Message):
     user = cursor.fetchone()
 
     if not user or user[0] != 'approved':
-        await message.reply("You are not authorized to create folders. Please wait for admin approval.")
+        await message.reply("You are not authorized to use the bot. Please wait for admin approval.")
         return
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -322,8 +322,16 @@ async def help(message: types.Message):
 @dp.message_handler(commands=['about'])
 async def help(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to use the bot. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -350,7 +358,7 @@ async def create_folder(message: types.Message):
         return
 
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -385,7 +393,7 @@ async def delete_file(message: types.Message):
         return
     
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -429,7 +437,7 @@ async def delete_folder(message: types.Message):
         return
     
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -479,7 +487,7 @@ async def get_all_files(message: types.Message):
         return
     
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -514,7 +522,7 @@ async def process_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
 
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await bot.answer_callback_query(callback_query.id)
@@ -649,14 +657,18 @@ async def handle_document(message: types.Message):
         else:
             folder_id = None
 
-        sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=f"New file uploaded: {file_name}")
+        # Define the specific caption
+        specific_caption = "@Medical_Contentbot\n\nAn Ever-growing archive of medical content"
+
+        # Send the file to the channel with the specific caption and get the message ID
+        sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=specific_caption)
         message_id = sent_message.message_id
 
         cursor.execute('INSERT INTO files (file_id, file_name, folder_id, message_id) VALUES (?, ?, ?, ?)', 
                        (file_id, file_name, folder_id, message_id))
         conn.commit()
 
-        await message.reply(f"File '{file_name}' uploaded successfully.")
+        await message.reply(f"File '{file_name}' uploaded successfully with the caption: {specific_caption}")
 
 
 # Callback query handler for inline buttons
@@ -682,7 +694,7 @@ async def rename_folder(message: types.Message):
         return
     
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
@@ -722,7 +734,7 @@ async def rename_file(message: types.Message):
         return
     
     if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
