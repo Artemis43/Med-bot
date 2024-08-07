@@ -100,6 +100,13 @@ if not column_exists(cursor, 'users', 'status'):
     ''')
     conn.commit()
 
+# Add 'caption' column if it doesn't exist
+if not column_exists(cursor, 'files', 'caption'):
+    cursor.execute('''
+    ALTER TABLE files ADD COLUMN caption TEXT
+    ''')
+    conn.commit()
+
 # Global dictionary to track the current upload folder for each admin
 # So that all admins can upload files simultaneously
 current_upload_folders = {}
@@ -478,15 +485,13 @@ async def get_all_files(message: types.Message):
         if folder_id:
             folder_id = folder_id[0]
 
-            # Get the file IDs and names in the folder
-            cursor.execute('SELECT file_id, file_name FROM files WHERE folder_id = ?', (folder_id,))
+            # Get the file IDs, names, and captions in the folder
+            cursor.execute('SELECT file_id, file_name, caption FROM files WHERE folder_id = ?', (folder_id,))
             files = cursor.fetchall()
 
             if files:
                 for file in files:
-                    # Custom caption for each file
-                    custom_caption = "@Medical_Contentbot"
-                    await bot.send_document(message.chat.id, file[0], caption=custom_caption)
+                    await bot.send_document(message.chat.id, file[0], caption=file[2])
             else:
                 await message.reply("No files found in the specified folder.")
         else:
@@ -610,8 +615,8 @@ async def handle_document(message: types.Message):
         sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=specific_caption)
         message_id = sent_message.message_id
 
-        cursor.execute('INSERT INTO files (file_id, file_name, folder_id, message_id) VALUES (?, ?, ?, ?)', 
-                       (file_id, file_name, folder_id, message_id))
+        cursor.execute('INSERT INTO files (file_id, file_name, folder_id, message_id, caption) VALUES (?, ?, ?, ?, ?)', 
+                       (file_id, file_name, folder_id, message_id, specific_caption))
         conn.commit()
 
         await message.reply(f"File '{file_name}' uploaded successfully with the caption: {specific_caption}")
