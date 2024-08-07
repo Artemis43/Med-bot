@@ -5,7 +5,6 @@ import shutil
 import sys
 import psutil
 import time
-#import dotenv
 import asyncio
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, executor, types, exceptions
@@ -14,11 +13,11 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.exceptions import MessageNotModified, ChatNotFound
 from keep_alive import keep_alive
+#import dotenv
 #from dotenv import load_dotenv
+#load_dotenv()
 
 keep_alive()
-
-#load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,11 +26,11 @@ logging.basicConfig(level=logging.INFO)
 API_TOKEN = os.environ.get('ApiToken')
 ADMIN_IDS = os.environ.get('AdminIds').split(',')
 CHANNEL_ID = os.environ.get('MyChannel')
-STICKER_ID = os.environ.get('MedSticker')
+STICKER_ID = os.environ.get('MedSticker') 
 DB_FILE_PATH = 'file_management.db'
 
 # Webhook settings
-WEBHOOK_HOST = os.environ.get('RenderUrl') #'https://rabid-owl-bot.onrender.com'  # Change this to your server URL
+WEBHOOK_HOST = os.environ.get('RenderUrl') #https://YourDomain.onrender.com  # Change this to your server URL
 WEBHOOK_PATH = f'/webhook/{API_TOKEN}'
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -47,7 +46,15 @@ dp.middleware.setup(LoggingMiddleware())
 conn = sqlite3.connect(DB_FILE_PATH)
 cursor = conn.cursor()
 
+# New db upload initiated only during /restore
 awaiting_new_db_upload = False
+
+# Function to check if a column exists in a table
+# Prevents the error - sqlite3.OperationalError: duplicate column name: approved
+def column_exists(cursor, table_name, column_name):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    return column_name in columns
 
 # Create tables for folders and files
 cursor.execute('''
@@ -79,20 +86,22 @@ CREATE TABLE IF NOT EXISTS users (
 ''')
 conn.commit()
 
-cursor.execute('''
-ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0
-''')
-conn.commit()
+# Add 'approved' column if it doesn't exist
+if not column_exists(cursor, 'users', 'approved'):
+    cursor.execute('''
+    ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0
+    ''')
+    conn.commit()
 
-# Add a status column to users table
-cursor.execute('''
-ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'pending'
-''')
-conn.commit()
+# Add 'status' column if it doesn't exist
+if not column_exists(cursor, 'users', 'status'):
+    cursor.execute('''
+    ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'pending'
+    ''')
+    conn.commit()
 
-
-
-# Global dictionary to track the current upload folder for each user
+# Global dictionary to track the current upload folder for each admin
+# So that all admins can upload files simultaneously
 current_upload_folders = {}
 
 # Function to set the current upload folder for a user
@@ -103,6 +112,7 @@ def set_current_upload_folder(user_id, folder_name):
 def get_current_upload_folder(user_id):
     return current_upload_folders.get(user_id)
 
+# Notifies Admins for approve/reject permission of the bot for new users
 async def notify_admins(user_id, username):
     username = username or "N/A"  # Use "N/A" if the username is None
     for admin_id in ADMIN_IDS:
@@ -118,11 +128,7 @@ async def notify_admins(user_id, username):
         except Exception as e:
             logging.error(f"Error sending message to admin {admin_id}: {e}")
 
-
-
-
-
-# Helper function to check if the user is a member of the required channels
+# Helper function to check if the user is a member of the required channels (ForcedSubs)
 async def is_user_member(user_id):
     for channel in REQUIRED_CHANNELS:
         try:
@@ -134,18 +140,7 @@ async def is_user_member(user_id):
             return False
     return True
 
-# Command to replace the existing database file with a new one
-@dp.message_handler(commands=['restore'])
-async def new_db(message: types.Message):
-    global awaiting_new_db_upload
-
-    if str(message.from_user.id) not in ADMIN_IDS:
-        await message.reply("You are not authorized to upload a new database file.")
-        return
-
-    awaiting_new_db_upload = True
-    await message.reply("Please upload the new 'file_management.db' file to replace the existing database.")
-
+# The UI of the bot
 async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
     # Fetch the number of files and folders
     cursor.execute('SELECT COUNT(*) FROM folders')
@@ -165,7 +160,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     # Compose the UI message text
     text = (
         f"**Welcome to The Medical Content Bot ✨**\n\n"
-        #f"**New game added every 3 hrs! Report to admin of any issues 👾**\n\n"
+        f"**About Us:** /about\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
         f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
@@ -189,11 +184,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     except exceptions.MessageNotModified:
         pass  # Handle the exception gracefully by ignoring it
 
-
-"""def add_user_to_db(user_id):
-    cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
-    conn.commit()"""
-
+# Adds new users to the database
 def add_user_to_db(user_id):
     cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
@@ -203,8 +194,7 @@ def add_user_to_db(user_id):
         cursor.execute('INSERT INTO users (user_id, status) VALUES (?, ?)', (user_id, status))
         conn.commit()
 
-
-
+# /start command
 @dp.message_handler(commands=['start'])
 async def handle_start(message: types.Message):
     user_id = message.from_user.id
@@ -236,9 +226,7 @@ async def handle_start(message: types.Message):
     elif user[0] == 'rejected':
         await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
 
-
-
-
+# Approve handler
 @dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
 async def approve_user(message: types.Message):
     user_id = int(message.text.split('_')[1])
@@ -254,6 +242,7 @@ async def approve_user(message: types.Message):
     except Exception as e:
         logging.error(f"Error sending approval message to user {user_id}: {e}")
 
+# Reject handler
 @dp.message_handler(lambda message: message.text.startswith('/reject_') and str(message.from_user.id) in ADMIN_IDS)
 async def reject_user(message: types.Message):
     user_id = int(message.text.split('_')[1])
@@ -268,22 +257,6 @@ async def reject_user(message: types.Message):
         logging.warning(f"User {user_id} chat not found.")
     except Exception as e:
         logging.error(f"Error sending rejection message to user {user_id}: {e}")
-
-# Command to send a backup of the database file (Admin only)
-@dp.message_handler(commands=['backup'])
-async def send_backup(message: types.Message):
-    if str(message.from_user.id) not in ADMIN_IDS:
-        await message.reply("You are not authorized to get the backup.")
-        return
-
-    # Path to the database file
-    db_file_path = 'file_management.db'
-    
-    try:
-        await bot.send_document(message.chat.id, types.InputFile(db_file_path))
-    except Exception as e:
-        logging.error(f"Error sending backup file: {e}")
-        await message.reply("Error sending backup file. Please try again later.")
 
 # Command to display help information
 @dp.message_handler(commands=['help'])
@@ -307,18 +280,15 @@ async def help(message: types.Message):
             "/help - Display this help message\n"
             "/download <folder\\_name> - Send with Folder name to get all files\n\n"
             "**💫 How to Use:**\n\n"
-            "|- Search for your folder in the list\n\n"
-            "|- Tap on the folder name to copy it\n\n"
-            "|- Long press on /download\n\n"
             "|- Paste the folder name after /download\n\n"
             "|- Send and get all your files👌\n\n"
             "**NOTE:\n\n**"
-            "`We donot host any content of this bot. All the content obtained from third-party servers.`\n\n"
+            "`We donot host content; All the content is from third-party servers.`\n\n"
             "**Contact Us:** [Here](https://t.me/MedContent_Adminbot)"
         )
         await message.reply(help_text, parse_mode='Markdown')
 
-# Command to display help information
+# Command to display about information
 @dp.message_handler(commands=['about'])
 async def help(message: types.Message):
     user_id = message.from_user.id
@@ -338,14 +308,19 @@ async def help(message: types.Message):
     else:
         about_text = (
             "**The Medical Content Bot ✨**\n\n"
-            "Platform - `Render`\n"
-            "Usage limit - `0.1 CPU|512 MB (RAM)`\n"
+            "I knew Telegram was a gold mine for all the students who are interested to learn.\n"
+            "But, most time was gone in the search of my desired content. Thus, I came up with an idea of this bot!\n\n"
+            "However, sometimes the things I would like to create may need some help to be alive...\nAlone, I do so little. But believe me when I say this - Together, we can do much better!\n\n"
+            "**Donate Us:** [Here](https://t.me/MedContent_Adminbot)\n\n"
+            "About the Bot:\n"
+            "Usage limit - `1 CPU|2 GB (RAM)`\n"
+            "Price - `~ ₹560 per Month`\n"
             "Framework - `Python-Flask`\n\n"
-            "**Contact Us:** [Here](https://t.me/MedContent_Adminbot)\n\n"
             "All the Best!"
         )
         await message.reply(about_text, parse_mode='Markdown')
 
+# command to create new folder (Admin only)
 @dp.message_handler(commands=['newfolder'])
 async def create_folder(message: types.Message):
     user_id = message.from_user.id
@@ -515,66 +490,7 @@ async def get_all_files(message: types.Message):
         else:
             await message.reply("Folder not found.")
 
-#Callback Query handler to filter UI based on inline selections
-@dp.callback_query_handler(lambda c: c.data)
-async def process_callback(callback_query: types.CallbackQuery):
-    global current_upload_folder
-    user_id = callback_query.from_user.id
-
-    if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
-        for channel in REQUIRED_CHANNELS:
-            join_message += f"{channel}\n"
-        await bot.answer_callback_query(callback_query.id)
-        await bot.send_message(callback_query.from_user.id, join_message)
-        return
-
-    code = callback_query.data
-
-    if code == 'back':
-        current_upload_folder = None
-        await send_ui(callback_query.from_user.id, callback_query.message.message_id)
-    elif code == 'root':
-        await send_ui(callback_query.from_user.id, callback_query.message.message_id)
-    elif code.startswith('letter_'):
-        selected_letter = code.split('_')[1]
-        await send_ui(callback_query.from_user.id, callback_query.message.message_id, selected_letter=selected_letter)
-    else:
-        current_upload_folder = code
-        await send_ui(callback_query.from_user.id, callback_query.message.message_id, current_folder=current_upload_folder)
-
-    await bot.answer_callback_query(callback_query.id)
-
-
-# Command to stop the bot (Admin only)
-@dp.message_handler(commands=['stop'])
-async def stop(message: types.Message):
-    if str(message.from_user.id) not in ADMIN_IDS:
-        await message.reply("You are not authorized to stop the bot.")
-        return
-
-    await message.reply("Bot is stopping...")
-
-    try:
-        # Fetch all users from the database
-        cursor.execute('SELECT user_id FROM users')
-        user_ids = cursor.fetchall()
-
-        # Send the broadcast message to all users
-        for user_id in user_ids:
-            try:
-                await bot.send_message(user_id[0], "Regular maintenance 👾 for 10 mins.")
-            except Exception as e:
-                logging.error(f"Error sending broadcast to user {user_id[0]}: {e}")
-
-        await message.reply(f"Broadcast sent to {len(user_ids)} users.")
-    except Exception as e:
-        logging.error(f"Error fetching users: {e}")
-        await message.reply("Error fetching users. Please try again later.")
-    
-    # Use sys.exit to terminate the bot
-    sys.exit("Bot stopped by admin command.")
-
+# command to broadcast messages to users (Admin only)
 @dp.message_handler(commands=['broadcast'])
 async def broadcast_message(message: types.Message):
     if str(message.from_user.id) not in ADMIN_IDS:
@@ -602,6 +518,34 @@ async def broadcast_message(message: types.Message):
     except Exception as e:
         logging.error(f"Error fetching users: {e}")
         await message.reply("Error fetching users. Please try again later.")
+
+# Command to send a backup of the database file (Admin only)
+@dp.message_handler(commands=['backup'])
+async def send_backup(message: types.Message):
+    if str(message.from_user.id) not in ADMIN_IDS:
+        await message.reply("You are not authorized to get the backup.")
+        return
+
+    # Path to the database file
+    db_file_path = 'file_management.db'
+    
+    try:
+        await bot.send_document(message.chat.id, types.InputFile(db_file_path))
+    except Exception as e:
+        logging.error(f"Error sending backup file: {e}")
+        await message.reply("Error sending backup file. Please try again later.")
+
+# Command to replace the existing database file with a new one
+@dp.message_handler(commands=['restore'])
+async def new_db(message: types.Message):
+    global awaiting_new_db_upload
+
+    if str(message.from_user.id) not in ADMIN_IDS:
+        await message.reply("You are not authorized to upload a new database file.")
+        return
+
+    awaiting_new_db_upload = True
+    await message.reply("Please upload the new 'file_management.db' file to replace the existing database.")
 
 # Handler for incoming documents
 @dp.message_handler(content_types=[types.ContentType.DOCUMENT])
@@ -670,7 +614,6 @@ async def handle_document(message: types.Message):
 
         await message.reply(f"File '{file_name}' uploaded successfully with the caption: {specific_caption}")
 
-
 # Callback query handler for inline buttons
 @dp.callback_query_handler(lambda c: c.data)
 async def process_callback(callback_query: types.CallbackQuery):
@@ -680,6 +623,35 @@ async def process_callback(callback_query: types.CallbackQuery):
     elif callback_query.data == 'root':
         await send_ui(callback_query.message.chat.id)
     # Handle other callback data if necessary
+
+# Command to stop the bot and notify users (Admin only)
+@dp.message_handler(commands=['stop'])
+async def stop(message: types.Message):
+    if str(message.from_user.id) not in ADMIN_IDS:
+        await message.reply("You are not authorized to stop the bot.")
+        return
+
+    await message.reply("Bot is stopping...")
+
+    try:
+        # Fetch all users from the database
+        cursor.execute('SELECT user_id FROM users')
+        user_ids = cursor.fetchall()
+
+        # Send the broadcast message to all users
+        for user_id in user_ids:
+            try:
+                await bot.send_message(user_id[0], "Bot under maintenance")
+            except Exception as e:
+                logging.error(f"Error sending broadcast to user {user_id[0]}: {e}")
+
+        await message.reply(f"Broadcast sent to {len(user_ids)} users.")
+    except Exception as e:
+        logging.error(f"Error fetching users: {e}")
+        await message.reply("Error fetching users. Please try again later.")
+    
+    # Use sys.exit to terminate the bot
+    sys.exit("Bot stopped by admin command.")
 
 # Command to rename a folder (Admin only)
 @dp.message_handler(commands=['renamefolder'])
