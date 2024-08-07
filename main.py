@@ -484,7 +484,7 @@ async def get_all_files(message: types.Message):
 
             if files:
                 for file in files:
-                    await bot.send_document(message.chat.id, file[0], caption="@Medical_Contentbot\nAn Ever-growing archive of medical content")
+                    await bot.send_document(message.chat.id, file[0], caption=file[1])
             else:
                 await message.reply("No files found in the specified folder.")
         else:
