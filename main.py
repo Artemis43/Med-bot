@@ -168,7 +168,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         #f"**New game added every 3 hrs! Report to admin of any issues 👾**\n\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
-        f"**List of Folders 🔽**\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
+        f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
     )
 
     # Fetch and list folders in alphabetical order
@@ -179,7 +179,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     for folder in folders:
         text += f"|-📒 `{folder[0]}`\n"
 
-    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
+    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
     try:
         if message_id:
