@@ -164,9 +164,14 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton("🙃 Refresh", callback_data='root'))
 
+    # Get chat info to retrieve the name
+    chat = await bot.get_chat(chat_id)
+    chat_name = chat.full_name if chat.full_name else chat.username
+
     # Compose the UI message text
     text = (
-        f"**Welcome to The Medical Content Bot ✨**\n\n"
+        f"**Hello `{chat_name}`!**\n"
+        f"**I'm The Medical Content Bot ✨**\n\n"
         f"**About Us:** /about\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
