@@ -469,7 +469,7 @@ async def get_all_files(message: types.Message):
     else:
         folder_name = message.get_args()
         if not folder_name:
-            await message.reply("Please specify a game name.")
+            await message.reply("Please specify a folder name.")
             return
 
         # Get the folder ID
@@ -484,7 +484,9 @@ async def get_all_files(message: types.Message):
 
             if files:
                 for file in files:
-                    await bot.send_document(message.chat.id, file[0], caption=file[1])
+                    # Custom caption for each file
+                    custom_caption = "@Medical_Contentbot"
+                    await bot.send_document(message.chat.id, file[0], caption=custom_caption)
             else:
                 await message.reply("No files found in the specified folder.")
         else:
