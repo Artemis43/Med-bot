@@ -177,7 +177,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
 
     # Add folders to the text
     for folder in folders:
-        text += f"|-📁 `{folder[0]}`\n"
+        text += f"|-📒 `{folder[0]}`\n"
 
     text += "\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
@@ -217,7 +217,7 @@ async def handle_start(message: types.Message):
         await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nSend us your ID-Proof as a Medico @MedContent_Adminbot\n\nYou will be granted access only after verification!")
         await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
-        await message.answer("Welcome! You have been given access to the bot 😉")
+        await message.answer("Welcome! You have been given access to the bot 🙌")
         if not await is_user_member(user_id):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
             await asyncio.sleep(2)
@@ -289,6 +289,12 @@ async def send_backup(message: types.Message):
 @dp.message_handler(commands=['help'])
 async def help(message: types.Message):
     user_id = message.from_user.id
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to create folders. Please wait for admin approval.")
+        return
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -307,7 +313,7 @@ async def help(message: types.Message):
             "|- Paste the folder name after /download\n\n"
             "|- Send and get all your files👌\n\n"
             "**NOTE:\n\n**"
-            "`This bot is for educational purposes only`\n\n"
+            "`We donot host any content of this bot. All the content obtained from third-party servers.`\n\n"
             "**Contact Us:** [Here](https://t.me/MedContent_Adminbot)"
         )
         await message.reply(help_text, parse_mode='Markdown')
@@ -332,20 +338,24 @@ async def help(message: types.Message):
         )
         await message.reply(about_text, parse_mode='Markdown')
 
-# Command to create a new folder
 @dp.message_handler(commands=['newfolder'])
 async def create_folder(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to create folders. Please wait for admin approval.")
+        return
+
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
     else:
-        #global current_upload_folder
-
-        # Only the admin can create folders
-        if str(message.from_user.id) not in ADMIN_IDS:
+        if str(user_id) not in ADMIN_IDS:
             await message.reply("You are not authorized to create folders.")
             return
 
@@ -354,21 +364,26 @@ async def create_folder(message: types.Message):
             await message.reply("Please specify a folder name.")
             return
 
-        # Insert the new folder into the database
         cursor.execute('INSERT INTO folders (name) VALUES (?)', (folder_name,))
         conn.commit()
 
-        # Set the current upload folder for the user to the newly created folder
         set_current_upload_folder(user_id, folder_name)
 
-        #await send_or_edit_message()
-
         await message.reply(f"Folder '{folder_name}' created and set as the current upload folder.")
+
 
 # Command to delete a file by name (Admin only)
 @dp.message_handler(commands=['deletefile'])
 async def delete_file(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to delete files. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -405,6 +420,14 @@ async def delete_file(message: types.Message):
 @dp.message_handler(commands=['deletefolder'])
 async def delete_folder(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to delete folders. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -447,6 +470,14 @@ async def delete_folder(message: types.Message):
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to download content. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -569,7 +600,13 @@ async def broadcast_message(message: types.Message):
 async def handle_document(message: types.Message):
     user_id = message.from_user.id
 
-    # Check if the user is a member of the required channels
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to upload documents. Please wait for admin approval.")
+        return
+
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -578,38 +615,29 @@ async def handle_document(message: types.Message):
     else:
         global awaiting_new_db_upload
 
-        # Check if the bot is awaiting a new database upload and if the uploaded file is 'file_management.db'
         if awaiting_new_db_upload and message.document.file_name == "file_management.db":
-            # Only the admin can upload a new database file
-            if str(message.from_user.id) not in ADMIN_IDS:
+            if str(user_id) not in ADMIN_IDS:
                 awaiting_new_db_upload = False
                 await message.reply("You are not authorized to upload a new database file.")
                 return
 
-            # Save the uploaded file to a temporary location
             file_path = f"new_{message.document.file_name}"
             await message.document.download(destination_file=file_path)
 
-            # Replace the existing database file with the new one
             shutil.move(file_path, DB_FILE_PATH)
             awaiting_new_db_upload = False
             await message.reply("Database file replaced successfully. Restarting the bot to apply changes.")
 
-            # Restart the bot
             os.execl(sys.executable, sys.executable, *sys.argv)
             return
 
-        # Existing document handling code
-        # Only admins can upload files, so check admin authorization
-        if str(message.from_user.id) not in ADMIN_IDS:
+        if str(user_id) not in ADMIN_IDS:
             await message.reply("You are not authorized to upload files.")
             return
 
-        # Get file details from the incoming document
         file_id = message.document.file_id
         file_name = message.document.file_name
 
-        # Determine the folder ID for the current upload folder
         current_upload_folder = get_current_upload_folder(user_id)
         if current_upload_folder:
             cursor.execute('SELECT id FROM folders WHERE name = ?', (current_upload_folder,))
@@ -621,16 +649,15 @@ async def handle_document(message: types.Message):
         else:
             folder_id = None
 
-        # Send the file to the channel and get the message ID
         sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=f"New file uploaded: {file_name}")
         message_id = sent_message.message_id
 
-        # Insert the file into the database with the message ID
         cursor.execute('INSERT INTO files (file_id, file_name, folder_id, message_id) VALUES (?, ?, ?, ?)', 
                        (file_id, file_name, folder_id, message_id))
         conn.commit()
 
         await message.reply(f"File '{file_name}' uploaded successfully.")
+
 
 # Callback query handler for inline buttons
 @dp.callback_query_handler(lambda c: c.data)
@@ -646,6 +673,14 @@ async def process_callback(callback_query: types.CallbackQuery):
 @dp.message_handler(commands=['renamefolder'])
 async def rename_folder(message: types.Message):
     user_id = message.from_user.id
+    
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to rename folders. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
@@ -678,6 +713,14 @@ async def rename_folder(message: types.Message):
 @dp.message_handler(commands=['renamefile'])
 async def rename_file(message: types.Message):
     user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to rename files. Please wait for admin approval.")
+        return
+    
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected 😉\n"
         for channel in REQUIRED_CHANNELS:
