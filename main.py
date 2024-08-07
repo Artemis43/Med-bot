@@ -609,7 +609,7 @@ async def handle_document(message: types.Message):
             folder_id = None
 
         # Define the specific caption
-        specific_caption = "@Medical_Contentbot\n\nAn Ever-growing archive of medical content"
+        specific_caption = "@Medical_Contentbot\nEver-growing archive of medical content"
 
         # Send the file to the channel with the specific caption and get the message ID
         sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=specific_caption)
@@ -621,15 +621,29 @@ async def handle_document(message: types.Message):
 
         await message.reply(f"File '{file_name}' uploaded successfully with the caption: {specific_caption}")
 
-# Callback query handler for inline buttons
+#Callback Query handler to filter UI based on inline selections
 @dp.callback_query_handler(lambda c: c.data)
 async def process_callback(callback_query: types.CallbackQuery):
-    if callback_query.data == 'back':
-        # Logic to go back to the previous folder
-        await send_ui(callback_query.message.chat.id)  # This should be updated with the actual previous folder logic
-    elif callback_query.data == 'root':
-        await send_ui(callback_query.message.chat.id)
-    # Handle other callback data if necessary
+    global current_upload_folder
+    user_id = callback_query.from_user.id
+
+    if not await is_user_member(user_id):
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
+        for channel in REQUIRED_CHANNELS:
+            join_message += f"{channel}\n"
+        await bot.answer_callback_query(callback_query.id)
+        await bot.send_message(callback_query.from_user.id, join_message)
+        return
+
+    code = callback_query.data
+
+    if code == 'root':
+        await send_ui(callback_query.from_user.id, callback_query.message.message_id)
+    else:
+        current_upload_folder = code
+        await send_ui(callback_query.from_user.id, callback_query.message.message_id, current_folder=current_upload_folder)
+
+    await bot.answer_callback_query(callback_query.id)
 
 # Command to stop the bot and notify users (Admin only)
 @dp.message_handler(commands=['stop'])
