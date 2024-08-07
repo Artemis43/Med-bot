@@ -469,7 +469,7 @@ async def get_all_files(message: types.Message):
     else:
         folder_name = message.get_args()
         if not folder_name:
-            await message.reply("Please specify a folder name.")
+            await message.reply("Please specify a game name.")
             return
 
         # Get the folder ID
