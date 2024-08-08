@@ -740,6 +740,14 @@ async def get_all_files(message: types.Message):
             sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
             messages_to_delete.append(sent_message.message_id)
 
+            # Update the last download time for the user
+            cursor.execute('''
+            UPDATE users
+            SET last_download = ?
+            WHERE user_id = ?
+            ''', (current_time.strftime("%Y-%m-%d %H:%M:%S"), user_id))
+            conn.commit()
+
         # Notify the user that files will be deleted in a specified time
         warning_message = await message.reply(f"The files will be deleted in {delete_time // 60} minutes.")
 
@@ -757,14 +765,6 @@ async def get_all_files(message: types.Message):
             await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
         except MessageNotModified:
             pass
-
-        # Update the last download time for the user
-        cursor.execute('''
-        UPDATE users
-        SET last_download = ?
-        WHERE user_id = ?
-        ''', (current_time.strftime("%Y-%m-%d %H:%M:%S"), user_id))
-        conn.commit()
     else:
         await message.reply("No files found in the specified folder.")
 
