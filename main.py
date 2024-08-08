@@ -472,8 +472,6 @@ async def delete_folder(message: types.Message):
         else:
             await message.reply("Folder not found.")
 
-import asyncio
-
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
@@ -513,7 +511,7 @@ async def get_all_files(message: types.Message):
                     messages_to_delete.append(sent_message.message_id)
 
                 # Notify the user that files will be deleted in 10 minutes
-                await message.reply("The files will be deleted in 10 minutes.")
+                warning_message = await message.reply("The files will be deleted in 10 minutes.")
 
                 # Schedule deletion of messages after 10 minutes
                 await asyncio.sleep(600)  # 600 seconds = 10 minutes
@@ -523,6 +521,12 @@ async def get_all_files(message: types.Message):
                         await bot.delete_message(message.chat.id, message_id)
                     except exceptions.MessageToDeleteNotFound:
                         continue
+
+                # Edit the warning message to indicate files have been deleted
+                try:
+                    await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
+                except MessageNotModified:
+                    pass
             else:
                 await message.reply("No files found in the specified folder.")
         else:
@@ -585,7 +589,6 @@ async def new_db(message: types.Message):
     awaiting_new_db_upload = True
     await message.reply("Please upload the new 'file_management.db' file to replace the existing database.")
 
-# command to set caption for uploaded files
 @dp.message_handler(commands=['caption'])
 async def set_caption(message: types.Message):
     user_id = message.from_user.id
@@ -690,16 +693,30 @@ async def handle_document(message: types.Message):
             if caption_type == 'custom':
                 specific_caption = custom_text
             elif caption_type == 'append':
-                specific_caption = f"{custom_text}"
+                # Append the custom text to the document's original caption
+                specific_caption = f"{message.caption or ''}\n{custom_text}"
         else:
-            specific_caption = "@Medical_Contentbot\nEver-growing archive of medical content"
+            # Default caption if no custom caption is set
+            specific_caption = message.caption or "@Medical_Contentbot\nEver-growing archive of medical content"
+
+        # Proceed with the file upload
+        current_upload_folder = get_current_upload_folder(user_id)
+        if current_upload_folder:
+            cursor.execute('SELECT id FROM folders WHERE name = ?', (current_upload_folder,))
+            folder_id = cursor.fetchone()
+            if folder_id:
+                folder_id = folder_id[0]
+            else:
+                folder_id = None
+        else:
+            folder_id = None
 
         # Send the file to the channel with the specific caption and get the message ID
         sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=specific_caption)
         message_id = sent_message.message_id
 
         cursor.execute('INSERT INTO files (file_id, file_name, folder_id, message_id, caption) VALUES (?, ?, ?, ?, ?)', 
-                       (file_id, file_name, folder_id, message_id, specific_caption))
+                    (file_id, file_name, folder_id, message_id, specific_caption))
         conn.commit()
 
         await message.reply(f"File '{file_name}' uploaded successfully with the caption: {specific_caption}")
