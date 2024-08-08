@@ -156,18 +156,6 @@ if not column_exists(cursor, 'users', 'last_download'):
 # So that all admins can upload files simultaneously
 current_upload_folders = {}
 
-# Ensure admins are always premium
-def ensure_admins_premium():
-    for admin_id in ADMIN_IDS:
-        cursor.execute('''
-            INSERT OR REPLACE INTO users (user_id, premium, premium_expiration)
-            VALUES (?, 1, ?)
-        ''', (admin_id, datetime.max))
-        conn.commit()
-
-# Call this function when your bot starts
-ensure_admins_premium()
-
 # Function to set the current upload folder for a user
 def set_current_upload_folder(user_id, folder_name):
     current_upload_folders[user_id] = folder_name
