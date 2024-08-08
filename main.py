@@ -344,12 +344,12 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     text += f"**How to Use:** /help\n\n"
 
     if is_premium_user:
-        text += f"🥳 **You are a Premium User!**\n"
+        text += f"🥳 **You are a Premium User!**\n\n"
         #text += f"**Your premium status expires on:** `{expiration_date_str}`\n\n"
     else:
-        text += f"🌟 **[Upgrade to Premium](https://t.me/MedContent_Adminbot)**\n\n"
+        text += f"🔑 **[Upgrade to Premium](https://t.me/medcontentbotinformation/2)**\n\n"
 
-    text += f"**List of Folders 🔽**\n\n"
+    text += f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
 
     # Fetch and list all folders, including premium status
     cursor.execute('SELECT name, premium FROM folders WHERE parent_id IS NULL ORDER BY name')
@@ -362,7 +362,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         else:
             text += f"|-🔒 `{folder_name}` (Premium)\n"
 
-    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
+    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Share files, Get Rewards :D` - [Share](https://t.me/medcontentbotinformation/3)"
 
     try:
         if message_id:
@@ -392,7 +392,7 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nContact @MedContent_Adminbot to verify\n\nYou will be granted access only after verification!")
+        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nVerify: [Here](https://t.me/medcontentbotinformation/4)\n\nYou will be granted access only after verification!")
         await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 🙌")
@@ -471,8 +471,8 @@ async def help(message: types.Message):
             "|- Put folder name after /download\n\n"
             "|- Send and get all your files👌\n\n"
             "**NOTE:\n\n**"
-            "`We donot host any content; All the content is from third-party servers.`\n\n"
-            "**Contact Us:** [Here](https://t.me/MedContent_Adminbot)"
+            "`We donot host any content; All the content is from third-party servers.`"
+            #"**Contact Us:** [Here](https://t.me/MedContent_Adminbot)"
         )
         await message.reply(help_text, parse_mode='Markdown')
 
@@ -499,7 +499,7 @@ async def help(message: types.Message):
             "I knew Telegram was a gold mine for all the students who are interested to learn\n"
             "But, most of my time was gone in the search of the desired content. Thus, I came up with an idea of this bot!\n\n"
             "However, sometimes the things I would create may need some help to be alive...\nAlone, I do so little. Believe me when I say this - Together, we can do much better!\n\n"
-            "**Upgrade to Premium:** [Here](https://t.me/MedContent_Adminbot)\n\n"
+            "**Upgrade to Premium:** [Here](https://t.me/medcontentbotinformation/2)\n\n"
             "About the Bot:\n"
             "Usage limit - `1 CPU|2 GB (RAM)`\n"
             "Hosting Cost ~ `₹560/Month`\n"
