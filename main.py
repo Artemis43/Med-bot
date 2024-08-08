@@ -165,7 +165,7 @@ async def set_premium(message: types.Message):
         action = action.lower()
 
         if action == 'on':
-            expiration_date = datetime.now() + timedelta(seconds=60)
+            expiration_date = datetime.now() + timedelta(days=15)
             cursor.execute('''
                 UPDATE users 
                 SET premium = 1, premium_expiration = ? 
@@ -176,7 +176,7 @@ async def set_premium(message: types.Message):
             await message.reply(f"User {user_id} has been marked as premium until {expiration_date}.")
             
             try:
-                await bot.send_message(user_id, "Congratulations! You have been granted premium status for 30 days.")
+                await bot.send_message(user_id, "Congratulations! You have been upgraded to Premium for 15 days.")
             except exceptions.BotBlocked:
                 await message.reply(f"Could not notify user {user_id}, as they have blocked the bot.")
 
@@ -210,7 +210,7 @@ async def remove_premium_after_expiry(user_id: int, expiration_date: datetime):
     conn.commit()
     
     try:
-        await bot.send_message(user_id, "Your premium status has expired.")
+        await bot.send_message(user_id, "Your Premium has expired.")
     except exceptions.BotBlocked:
         logging.warning(f"Could not notify user {user_id} about premium expiration, as they have blocked the bot.")
 
@@ -222,7 +222,7 @@ async def notify_admins(user_id, username):
     try:
         await bot.send_message(
             first_admin_id,
-            f"User @{username} (ID: {user_id}) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
+            f"User @{username} (ID: `{user_id}`) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
         )
     except exceptions.BotBlocked:
         logging.warning(f"Admin {first_admin_id} has blocked the bot.")
@@ -349,7 +349,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     else:
         text += f"🌟 **[Upgrade to Premium](https://t.me/MedContent_Adminbot)**\n\n"
 
-    text += f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
+    text += f"**List of Folders 🔽**\n\n"
 
     # Fetch and list all folders, including premium status
     cursor.execute('SELECT name, premium FROM folders WHERE parent_id IS NULL ORDER BY name')
