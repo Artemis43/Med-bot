@@ -165,7 +165,7 @@ async def set_premium(message: types.Message):
         action = action.lower()
 
         if action == 'on':
-            expiration_date = datetime.now() + timedelta(days=30)
+            expiration_date = datetime.now() + timedelta(seconds=60)
             cursor.execute('''
                 UPDATE users 
                 SET premium = 1, premium_expiration = ? 
@@ -360,7 +360,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         if is_premium_user or not premium:
             text += f"|-📒 `{folder_name}`\n"
         else:
-            text += f"|-📦 `{folder_name}` (Premium)\n"
+            text += f"|-🔒 `{folder_name}` (Premium)\n"
 
     text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
@@ -499,7 +499,7 @@ async def help(message: types.Message):
             "I knew Telegram was a gold mine for all the students who are interested to learn\n"
             "But, most of my time was gone in the search of the desired content. Thus, I came up with an idea of this bot!\n\n"
             "However, sometimes the things I would create may need some help to be alive...\nAlone, I do so little. Believe me when I say this - Together, we can do much better!\n\n"
-            "**Donate Us:** [Here](https://t.me/MedContent_Adminbot)\n\n"
+            "**Upgrade to Premium:** [Here](https://t.me/MedContent_Adminbot)\n\n"
             "About the Bot:\n"
             "Usage limit - `1 CPU|2 GB (RAM)`\n"
             "Hosting Cost ~ `₹560/Month`\n"
