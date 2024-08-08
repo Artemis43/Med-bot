@@ -117,6 +117,20 @@ if not column_exists(cursor, 'files', 'caption'):
     ''')
     conn.commit()
 
+# Add 'premium' column if it doesn't exist
+if not column_exists(cursor, 'folders', 'premium'):
+    cursor.execute('''
+    ALTER TABLE folders ADD COLUMN premium INTEGER DEFAULT 0
+    ''')
+    conn.commit()
+
+# Add 'premium' column if it doesn't exist
+if not column_exists(cursor, 'users', 'premium'):
+    cursor.execute('''
+    ALTER TABLE users ADD COLUMN premium INTEGER DEFAULT 0
+    ''')
+    conn.commit()
+
 # Global dictionary to track the current upload folder for each admin
 # So that all admins can upload files simultaneously
 current_upload_folders = {}
@@ -128,6 +142,33 @@ def set_current_upload_folder(user_id, folder_name):
 # Function to get the current upload folder for a user
 def get_current_upload_folder(user_id):
     return current_upload_folders.get(user_id)
+
+# Set premium status for a user
+@dp.message_handler(commands=['setpremium'])
+async def set_premium(message: types.Message):
+    if str(message.from_user.id) in ADMIN_IDS:
+        args = message.get_args().split()
+
+        if len(args) != 2:
+            await message.reply("Usage: /setpremium <user_id> <on|off>")
+            return
+
+        user_id, action = args
+        user_id = int(user_id)
+        action = action.lower()
+
+        if action == 'on':
+            cursor.execute('UPDATE users SET premium = 1 WHERE user_id = ?', (user_id,))
+            conn.commit()
+            await message.reply(f"User {user_id} has been marked as premium.")
+        elif action == 'off':
+            cursor.execute('UPDATE users SET premium = 0 WHERE user_id = ?', (user_id,))
+            conn.commit()
+            await message.reply(f"User {user_id} has been removed from premium status.")
+        else:
+            await message.reply("Invalid action. Use 'on' to set premium or 'off' to remove premium.")
+    else:
+        await message.reply("You are not authorized to perform this action.")
 
 # Notifies Admins for approve/reject permission of the bot for new users
 async def notify_admins(user_id, username):
@@ -185,12 +226,20 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         f"**I'm The Medical Content Bot ✨**\n"
         f"**About Me:** /about\n"
         f"**How to Use:** /help\n\n"
-        #f"**📁 Total Games:** {folder_count}\n\n"
         f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
     )
 
-    # Fetch and list folders in alphabetical order
-    cursor.execute('SELECT name FROM folders WHERE parent_id IS NULL ORDER BY name')
+    # Check if the user is premium
+    cursor.execute('SELECT premium FROM users WHERE user_id = ?', (chat_id,))
+    is_premium_user = cursor.fetchone()
+    is_premium_user = is_premium_user and is_premium_user[0]
+
+    # Fetch and list folders in alphabetical order, filter based on premium status
+    if is_premium_user:
+        cursor.execute('SELECT name FROM folders WHERE parent_id IS NULL ORDER BY name')
+    else:
+        cursor.execute('SELECT name FROM folders WHERE parent_id IS NULL AND premium = 0 ORDER BY name')
+
     folders = cursor.fetchall()
 
     # Add folders to the text
@@ -365,18 +414,23 @@ async def create_folder(message: types.Message):
             await message.reply("You are not authorized to create folders.")
             return
 
-        folder_name = message.get_args()
+        args = message.get_args().split(' ', 1)
+        folder_name = args[0]
+        premium = 0  # Default to non-premium
+
+        if len(args) > 1 and args[1].strip().upper() == 'PREMIUM':
+            premium = 1
+
         if not folder_name:
             await message.reply("Please specify a folder name.")
             return
 
-        cursor.execute('INSERT INTO folders (name) VALUES (?)', (folder_name,))
+        cursor.execute('INSERT INTO folders (name, premium) VALUES (?, ?)', (folder_name, premium))
         conn.commit()
 
         set_current_upload_folder(user_id, folder_name)
 
-        await message.reply(f"Folder '{folder_name}' created and set as the current upload folder.")
-
+        await message.reply(f"Folder '{folder_name}' created {'as a PREMIUM folder' if premium else ''} and set as the current upload folder.")
 
 # Command to delete a file by name (Admin only)
 @dp.message_handler(commands=['deletefile'])
@@ -439,39 +493,47 @@ async def delete_folder(message: types.Message):
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
-    else:
-        if str(message.from_user.id) not in ADMIN_IDS:
-            await message.reply("You are not authorized to delete folders.")
-            return
+        return
 
-        folder_name = message.get_args()
-        if not folder_name:
-            await message.reply("Please specify a folder name.")
-            return
+    if str(message.from_user.id) not in ADMIN_IDS:
+        await message.reply("You are not authorized to delete folders.")
+        return
 
-        # Get the folder ID to be deleted
-        cursor.execute('SELECT id FROM folders WHERE name = ?', (folder_name,))
-        folder_id = cursor.fetchone()
-        if folder_id:
-            folder_id = folder_id[0]
+    folder_name = message.get_args()
+    if not folder_name:
+        await message.reply("Please specify a folder name.")
+        return
 
-            # Get the message IDs of the files in the folder
-            cursor.execute('SELECT message_id FROM files WHERE folder_id = ?', (folder_id,))
-            message_ids = cursor.fetchall()
+    # Get the folder ID to be deleted
+    cursor.execute('SELECT id FROM folders WHERE name = ?', (folder_name,))
+    folder_id = cursor.fetchone()
 
-            # Delete the files from the channel and the database
-            for message_id in message_ids:
-                await bot.delete_message(CHANNEL_ID, message_id[0])
-            cursor.execute('DELETE FROM files WHERE folder_id = ?', (folder_id,))
+    if not folder_id:
+        await message.reply("Folder not found.")
+        return
 
-            # Delete the folder from the database
-            cursor.execute('DELETE FROM folders WHERE id = ?', (folder_id,))
-            conn.commit()
+    folder_id = folder_id[0]
 
-            await message.reply(f"Folder '{folder_name}' and its contents deleted.")
-        else:
-            await message.reply("Folder not found.")
+    # Get the message IDs of the files in the folder
+    cursor.execute('SELECT message_id FROM files WHERE folder_id = ?', (folder_id,))
+    message_ids = cursor.fetchall()
 
+    # Delete the files from the channel and the database
+    for message_id in message_ids:
+        try:
+            await bot.delete_message(CHANNEL_ID, message_id[0])
+        except exceptions.MessageToDeleteNotFound:
+            continue  # Skip if the message is not found
+
+    cursor.execute('DELETE FROM files WHERE folder_id = ?', (folder_id,))
+
+    # Delete the folder from the database
+    cursor.execute('DELETE FROM folders WHERE id = ?', (folder_id,))
+    conn.commit()
+
+    await message.reply(f"Folder '{folder_name}' and its contents deleted.")
+
+# download all files from a folder
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
@@ -482,55 +544,67 @@ async def get_all_files(message: types.Message):
     if not user or user[0] != 'approved':
         await message.reply("You are not authorized to download content. Please wait for admin approval.")
         return
-    
+
     if not await is_user_member(user_id):
         join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
         for channel in REQUIRED_CHANNELS:
             join_message += f"{channel}\n"
         await message.reply(join_message)
-    else:
-        folder_name = message.get_args()
-        if not folder_name:
-            await message.reply("Please specify a folder name.")
+        return
+
+    folder_name = message.get_args()
+    if not folder_name:
+        await message.reply("Please specify a folder name.")
+        return
+
+    # Get the folder ID and premium status
+    cursor.execute('SELECT id, premium FROM folders WHERE name = ?', (folder_name,))
+    folder_info = cursor.fetchone()
+
+    if not folder_info:
+        await message.reply("Folder not found.")
+        return
+
+    folder_id, is_premium = folder_info
+
+    # Check if the folder is premium and if the user is allowed to access it
+    if is_premium:
+        cursor.execute('SELECT premium FROM users WHERE user_id = ?', (user_id,))
+        is_premium_user = cursor.fetchone()
+
+        if not is_premium_user or not is_premium_user[0]:
+            await message.reply("This folder is for premium users only. Please upgrade to access it.")
             return
 
-        # Get the folder ID
-        cursor.execute('SELECT id FROM folders WHERE name = ?', (folder_name,))
-        folder_id = cursor.fetchone()
-        if folder_id:
-            folder_id = folder_id[0]
+    # Get the file IDs, names, and captions in the folder
+    cursor.execute('SELECT file_id, file_name, caption FROM files WHERE folder_id = ?', (folder_id,))
+    files = cursor.fetchall()
 
-            # Get the file IDs, names, and captions in the folder
-            cursor.execute('SELECT file_id, file_name, caption FROM files WHERE folder_id = ?', (folder_id,))
-            files = cursor.fetchall()
+    if files:
+        messages_to_delete = []
+        for file in files:
+            sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
+            messages_to_delete.append(sent_message.message_id)
 
-            if files:
-                messages_to_delete = []
-                for file in files:
-                    sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
-                    messages_to_delete.append(sent_message.message_id)
+        # Notify the user that files will be deleted in 10 minutes
+        warning_message = await message.reply("The files will be deleted in 10 minutes.")
 
-                # Notify the user that files will be deleted in 10 minutes
-                warning_message = await message.reply("The files will be deleted in 10 minutes.")
+        # Schedule deletion of messages after 10 minutes
+        await asyncio.sleep(600)  # 600 seconds = 10 minutes
 
-                # Schedule deletion of messages after 10 minutes
-                await asyncio.sleep(600)  # 600 seconds = 10 minutes
+        for message_id in messages_to_delete:
+            try:
+                await bot.delete_message(message.chat.id, message_id)
+            except exceptions.MessageToDeleteNotFound:
+                continue
 
-                for message_id in messages_to_delete:
-                    try:
-                        await bot.delete_message(message.chat.id, message_id)
-                    except exceptions.MessageToDeleteNotFound:
-                        continue
-
-                # Edit the warning message to indicate files have been deleted
-                try:
-                    await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
-                except MessageNotModified:
-                    pass
-            else:
-                await message.reply("No files found in the specified folder.")
-        else:
-            await message.reply("Folder not found.")
+        # Edit the warning message to indicate files have been deleted
+        try:
+            await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
+        except MessageNotModified:
+            pass
+    else:
+        await message.reply("No files found in the specified folder.")
 
 # command to broadcast messages to users (Admin only)
 @dp.message_handler(commands=['broadcast'])
@@ -745,6 +819,77 @@ async def process_callback(callback_query: types.CallbackQuery):
 
     await bot.answer_callback_query(callback_query.id)
 
+# get the list of all (Admin Only)
+@dp.message_handler(commands=['list'])
+async def list_all(message: types.Message):
+    user_id = message.from_user.id
+    
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to use the bot. Please wait for admin approval.")
+        return
+    
+    if not await is_user_member(user_id):
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
+        for channel in REQUIRED_CHANNELS:
+            join_message += f"{channel}\n"
+        await message.reply(join_message)
+    else:
+        if str(message.from_user.id) not in ADMIN_IDS:
+            await message.reply("You are not authorized to access the database.")
+            return
+        
+    try:
+        # Fetch all folders
+        cursor.execute('SELECT id, name FROM folders')
+        folders = cursor.fetchall()
+
+        # Fetch all premium folders
+        cursor.execute('SELECT id, name FROM folders WHERE premium = 1')
+        premium_folders = cursor.fetchall()
+
+        # Fetch all users
+        cursor.execute('SELECT user_id FROM users')
+        users = cursor.fetchall()
+
+        # Fetch all premium users
+        cursor.execute('SELECT user_id FROM users WHERE premium = 1')
+        premium_users = cursor.fetchall()
+
+        # Prepare the response message
+        response = "<b>Folders:</b>\n"
+        if folders:
+            response += "\n".join([f"- {folder[1]} (ID: {folder[0]})" for folder in folders])
+        else:
+            response += "No folders found."
+
+        response += "\n\n<b>Premium Folders:</b>\n"
+        if premium_folders:
+            response += "\n".join([f"- {folder[1]} (ID: {folder[0]})" for folder in premium_folders])
+        else:
+            response += "No premium folders found."
+
+        response += "\n\n<b>Users:</b>\n"
+        if users:
+            response += "\n".join([f"- User ID: {user[0]}" for user in users])
+        else:
+            response += "No users found."
+
+        response += "\n\n<b>Premium Users:</b>\n"
+        if premium_users:
+            response += "\n".join([f"- User ID: {user[0]}" for user in premium_users])
+        else:
+            response += "No premium users found."
+
+        # Send the response message
+        await message.answer(response, parse_mode=ParseMode.HTML)
+    
+    except Exception as e:
+        logging.error(f"Error in /list command: {e}")
+        await message.answer("An error occurred while fetching the list.")
+
 # Command to stop the bot and notify users (Admin only)
 @dp.message_handler(commands=['stop'])
 async def stop(message: types.Message):
@@ -798,7 +943,7 @@ async def rename_folder(message: types.Message):
 
         args = message.get_args().split(',')
         if len(args) != 2:
-            await message.reply("Please specify the current folder name and the new folder name in the format: /renamegame <current_name>,<new_name>")
+            await message.reply("Please specify the current folder name and the new folder name in the format: /renamefolder <current_name>,<new_name>")
             return
 
         current_name, new_name = args
@@ -806,13 +951,24 @@ async def rename_folder(message: types.Message):
         # Check if the folder with the current name exists
         cursor.execute('SELECT id FROM folders WHERE name = ?', (current_name,))
         folder_id = cursor.fetchone()
-        if folder_id:
-            # Update the folder name in the database
-            cursor.execute('UPDATE folders SET name = ? WHERE id = ?', (new_name, folder_id[0]))
-            conn.commit()
-            await message.reply(f"Folder '{current_name}' has been renamed to '{new_name}'.")
-        else:
+
+        if not folder_id:
             await message.reply("Folder not found.")
+            return
+
+        # Check if the new folder name already exists
+        cursor.execute('SELECT id FROM folders WHERE name = ?', (new_name,))
+        existing_folder = cursor.fetchone()
+
+        if existing_folder:
+            await message.reply(f"A folder with the name '{new_name}' already exists. Please choose a different name.")
+            return
+
+        # Update the folder name in the database
+        cursor.execute('UPDATE folders SET name = ? WHERE id = ?', (new_name, folder_id[0]))
+        conn.commit()
+        
+        await message.reply(f"Folder '{current_name}' has been renamed to '{new_name}'.")
 
 # Command to rename a file (Admin only)
 @dp.message_handler(commands=['renamefile'])
