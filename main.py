@@ -199,7 +199,7 @@ async def is_user_member(user_id):
             return False
     return True
 
-# The UI of the bot
+"""# The UI of the bot
 async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
     # Fetch the number of files and folders
     cursor.execute('SELECT COUNT(*) FROM folders')
@@ -245,6 +245,61 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     # Add folders to the text
     for folder in folders:
         text += f"|-📒 `{folder[0]}`\n"
+
+    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
+
+    try:
+        if message_id:
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=keyboard, parse_mode='Markdown')
+        else:
+            await bot.send_message(chat_id, text, reply_markup=keyboard, parse_mode='Markdown')
+    except exceptions.MessageNotModified:
+        pass  # Handle the exception gracefully by ignoring it"""
+
+async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
+    # Fetch the number of files and folders
+    cursor.execute('SELECT COUNT(*) FROM folders')
+    folder_count = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM files')
+    file_count = cursor.fetchone()[0]
+
+    # Visual representation of the current location
+    current_path = "Root"
+    if current_folder:
+        current_path = f"Root / {current_folder}"
+
+    # Create inline keyboard for navigation
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("🙃 Refresh", callback_data='root'))
+
+    # Get chat info to retrieve the name
+    chat = await bot.get_chat(chat_id)
+    chat_name = chat.full_name if chat.full_name else chat.username
+
+    # Compose the UI message text
+    text = (
+        f"**Hello `{chat_name}`👋,**\n\n"
+        f"**I'm The Medical Content Bot ✨**\n"
+        f"**About Me:** /about\n"
+        f"**How to Use:** /help\n\n"
+        f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
+    )
+
+    # Check if the user is a premium user
+    cursor.execute('SELECT premium FROM users WHERE user_id = ?', (chat_id,))
+    is_premium_user = cursor.fetchone()
+    is_premium_user = is_premium_user and is_premium_user[0] == 1
+
+    # Fetch and list all folders, including premium status
+    cursor.execute('SELECT name, premium FROM folders WHERE parent_id IS NULL ORDER BY name')
+    folders = cursor.fetchall()
+
+    # Add folders to the text with appropriate labeling
+    for folder_name, premium in folders:
+        if is_premium_user or not premium:
+            text += f"|-📒 `{folder_name}`\n"
+        else:
+            text += f"|-📒 `{folder_name}` (Premium)\n"
 
     text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
