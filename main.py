@@ -327,7 +327,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     is_premium_user = user_data and user_data[0] == 1
     premium_expiration = user_data[1] if is_premium_user else None
 
-    # Convert premium_expiration to a datetime object if it exists
+    """# Convert premium_expiration to a datetime object if it exists
     expiration_date_str = "Unknown"
     if premium_expiration:
         try:
@@ -335,7 +335,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
             premium_expiration = datetime.strptime(premium_expiration, '%Y-%m-%d %H:%M:%S')
             expiration_date_str = premium_expiration.strftime('%Y-%m-%d')
         except ValueError:
-            premium_expiration = None  # Handle any unexpected date format
+            premium_expiration = None  # Handle any unexpected date format"""
 
     # Compose the UI message text
     text = f"**Hello `{chat_name}`👋,**\n\n"
@@ -345,9 +345,9 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
 
     if is_premium_user:
         text += f"🥳 **You are a Premium User!**\n"
-        text += f"**Your premium status expires on:** `{expiration_date_str}`\n\n"
+        #text += f"**Your premium status expires on:** `{expiration_date_str}`\n\n"
     else:
-        text += f"🌟 **[Upgrade to Premium](https://t.me/MedContent_Adminbot)** to access premium features!\n\n"
+        text += f"🌟 **[Upgrade to Premium](https://t.me/MedContent_Adminbot)**\n\n"
 
     text += f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
 
