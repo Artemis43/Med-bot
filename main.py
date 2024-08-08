@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS users (
 ''')
 conn.commit()
 
+# Create table for storing the current caption
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS current_caption (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caption_type TEXT NOT NULL,  -- 'custom' or 'append'
+    custom_text TEXT
+)
+''')
+conn.commit()
+
 # Add 'approved' column if it doesn't exist
 if not column_exists(cursor, 'users', 'approved'):
     cursor.execute('''
@@ -122,18 +132,19 @@ def get_current_upload_folder(user_id):
 # Notifies Admins for approve/reject permission of the bot for new users
 async def notify_admins(user_id, username):
     username = username or "N/A"  # Use "N/A" if the username is None
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(
-                admin_id,
-                f"User @{username} (ID: {user_id}) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
-            )
-        except exceptions.BotBlocked:
-            logging.warning(f"Admin {admin_id} has blocked the bot.")
-        except exceptions.ChatNotFound:
-            logging.warning(f"Admin {admin_id} chat not found.")
-        except Exception as e:
-            logging.error(f"Error sending message to admin {admin_id}: {e}")
+    first_admin_id = ADMIN_IDS[0]  # Get the first admin ID
+
+    try:
+        await bot.send_message(
+            first_admin_id,
+            f"User @{username} (ID: {user_id}) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
+        )
+    except exceptions.BotBlocked:
+        logging.warning(f"Admin {first_admin_id} has blocked the bot.")
+    except exceptions.ChatNotFound:
+        logging.warning(f"Admin {first_admin_id} chat not found.")
+    except Exception as e:
+        logging.error(f"Error sending message to admin {first_admin_id}: {e}")
 
 # Helper function to check if the user is a member of the required channels (ForcedSubs)
 async def is_user_member(user_id):
@@ -170,9 +181,9 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
 
     # Compose the UI message text
     text = (
-        f"**Hello `{chat_name}`!**\n"
-        f"**I'm The Medical Content Bot ✨**\n\n"
-        f"**About Us:** /about\n"
+        f"**Hello `{chat_name}`👋,**\n\n"
+        f"**I'm The Medical Content Bot ✨**\n"
+        f"**About Me:** /about\n"
         f"**How to Use:** /help\n\n"
         #f"**📁 Total Games:** {folder_count}\n\n"
         f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
@@ -216,15 +227,15 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Welcome to The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nSend us your ID-Proof as a Medico @MedContent_Adminbot\n\nYou will be granted access only after verification!")
+        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nContact @MedContent_Adminbot to verify\n\nYou will be granted access only after verification!")
         await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 🙌")
         if not await is_user_member(user_id):
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
+            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n\nAfter joining 👉 /start\n"
             keyboard = InlineKeyboardMarkup(row_width=1)
             for channel in REQUIRED_CHANNELS:
                 button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
@@ -232,7 +243,7 @@ async def handle_start(message: types.Message):
             await message.reply(join_message, reply_markup=keyboard)
         else:
             sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             await bot.delete_message(message.chat.id, sticker_msg.message_id)
             await send_ui(message.chat.id)
     elif user[0] == 'rejected':
@@ -292,10 +303,10 @@ async def help(message: types.Message):
             "/help - Display this help message\n"
             "/download <folder\\_name> - Send with Folder name to get all files\n\n"
             "**💫 How to Use:**\n\n"
-            "|- Paste the folder name after /download\n\n"
+            "|- Put folder name after /download\n\n"
             "|- Send and get all your files👌\n\n"
             "**NOTE:\n\n**"
-            "`We donot host content; All the content is from third-party servers.`\n\n"
+            "`We donot host any content; All the content is from third-party servers.`\n\n"
             "**Contact Us:** [Here](https://t.me/MedContent_Adminbot)"
         )
         await message.reply(help_text, parse_mode='Markdown')
@@ -320,13 +331,13 @@ async def help(message: types.Message):
     else:
         about_text = (
             "**The Medical Content Bot ✨**\n\n"
-            "I knew Telegram was a gold mine for all the students who are interested to learn.\n"
-            "But, most time was gone in the search of my desired content. Thus, I came up with an idea of this bot!\n\n"
-            "However, sometimes the things I would like to create may need some help to be alive...\nAlone, I do so little. But believe me when I say this - Together, we can do much better!\n\n"
+            "I knew Telegram was a gold mine for all the students who are interested to learn\n"
+            "But, most of my time was gone in the search of the desired content. Thus, I came up with an idea of this bot!\n\n"
+            "However, sometimes the things I would create may need some help to be alive...\nAlone, I do so little. Believe me when I say this - Together, we can do much better!\n\n"
             "**Donate Us:** [Here](https://t.me/MedContent_Adminbot)\n\n"
             "About the Bot:\n"
             "Usage limit - `1 CPU|2 GB (RAM)`\n"
-            "Price - `~ ₹560 per Month`\n"
+            "Hosting Cost ~ `₹560/Month`\n"
             "Framework - `Python-Flask`\n\n"
             "All the Best!"
         )
@@ -461,7 +472,8 @@ async def delete_folder(message: types.Message):
         else:
             await message.reply("Folder not found.")
 
-# Command to retrieve and send all files in a specified folder
+import asyncio
+
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
@@ -495,8 +507,22 @@ async def get_all_files(message: types.Message):
             files = cursor.fetchall()
 
             if files:
+                messages_to_delete = []
                 for file in files:
-                    await bot.send_document(message.chat.id, file[0], caption=file[2])
+                    sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
+                    messages_to_delete.append(sent_message.message_id)
+
+                # Notify the user that files will be deleted in 10 minutes
+                await message.reply("The files will be deleted in 10 minutes.")
+
+                # Schedule deletion of messages after 10 minutes
+                await asyncio.sleep(600)  # 600 seconds = 10 minutes
+
+                for message_id in messages_to_delete:
+                    try:
+                        await bot.delete_message(message.chat.id, message_id)
+                    except exceptions.MessageToDeleteNotFound:
+                        continue
             else:
                 await message.reply("No files found in the specified folder.")
         else:
@@ -559,6 +585,48 @@ async def new_db(message: types.Message):
     awaiting_new_db_upload = True
     await message.reply("Please upload the new 'file_management.db' file to replace the existing database.")
 
+# command to set caption for uploaded files
+@dp.message_handler(commands=['caption'])
+async def set_caption(message: types.Message):
+    user_id = message.from_user.id
+
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if not user or user[0] != 'approved':
+        await message.reply("You are not authorized to set captions. Please wait for admin approval.")
+        return
+
+    if not await is_user_member(user_id):
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
+        for channel in REQUIRED_CHANNELS:
+            join_message += f"{channel}\n"
+        await message.reply(join_message)
+    else:
+        if str(user_id) not in ADMIN_IDS:
+            await message.reply("You are not authorized to set captions.")
+            return
+
+        args = message.get_args()
+        if not args:
+            await message.reply("Please specify 'custom <your text>' or 'append <your text>'.")
+            return
+
+        args_split = args.split(" ", 1)
+        caption_type = args_split[0].lower()
+        custom_text = args_split[1] if len(args_split) > 1 else ""
+
+        if caption_type not in ['custom', 'append']:
+            await message.reply("Invalid option. Use 'custom <your text>' or 'append <your text>'.")
+            return
+
+        # Clear the existing caption configuration
+        cursor.execute('DELETE FROM current_caption')
+        cursor.execute('INSERT INTO current_caption (caption_type, custom_text) VALUES (?, ?)', (caption_type, custom_text))
+        conn.commit()
+
+        await message.reply(f"Caption set to '{caption_type}' with text: {custom_text}")
+
 # Handler for incoming documents
 @dp.message_handler(content_types=[types.ContentType.DOCUMENT])
 async def handle_document(message: types.Message):
@@ -613,8 +681,18 @@ async def handle_document(message: types.Message):
         else:
             folder_id = None
 
-        # Define the specific caption
-        specific_caption = "@Medical_Contentbot\nEver-growing archive of medical content"
+        # Get the current caption configuration
+        cursor.execute('SELECT caption_type, custom_text FROM current_caption ORDER BY id DESC LIMIT 1')
+        caption_config = cursor.fetchone()
+
+        if caption_config:
+            caption_type, custom_text = caption_config
+            if caption_type == 'custom':
+                specific_caption = custom_text
+            elif caption_type == 'append':
+                specific_caption = f"{custom_text}"
+        else:
+            specific_caption = "@Medical_Contentbot\nEver-growing archive of medical content"
 
         # Send the file to the channel with the specific caption and get the message ID
         sent_message = await bot.send_document(CHANNEL_ID, file_id, caption=specific_caption)
