@@ -336,6 +336,13 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     is_premium_user = user_data and user_data[0] == 1
     premium_expiration = user_data[1] if is_premium_user else None
 
+    # Convert premium_expiration to a datetime object if it exists
+    if premium_expiration:
+        try:
+            premium_expiration = datetime.strptime(premium_expiration, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            premium_expiration = None  # Handle any unexpected date format
+
     # Fetch and list all folders, including premium status
     cursor.execute('SELECT name, premium FROM folders WHERE parent_id IS NULL ORDER BY name')
     folders = cursor.fetchall()
