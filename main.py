@@ -295,17 +295,6 @@ async def is_user_member(user_id):
             return False
     return True
 
-@dp.callback_query_handler(lambda c: c.data.startswith('download_'))
-async def process_callback(callback_query: types.CallbackQuery):
-    callback_data = callback_query.data.split('_')
-    target_user_id = int(callback_data[1])
-
-    if callback_query.from_user.id != target_user_id:
-        await callback_query.answer("Not for you!", show_alert=True)
-    else:
-        await callback_query.answer("Sending files in PM...", show_alert=True)
-        # Proceed to send files to the user via PM here
-
 """# The UI of the bot
 async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
     # Fetch the number of files and folders
@@ -445,48 +434,37 @@ def add_user_to_db(user_id):
         cursor.execute('INSERT INTO users (user_id, status) VALUES (?, ?)', (user_id, status))
         conn.commit()
 
-# Handle user access when redirected from group to bot
+# /start command
 @dp.message_handler(commands=['start'])
 async def handle_start(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username
-    chat_type = message.chat.type
-
     add_user_to_db(user_id)
-
-    # Ensure admins are approved
-    if str(user_id) in ADMIN_IDS:
-        cursor.execute('UPDATE users SET status = ? WHERE user_id = ?', ('approved', user_id))
-        conn.commit()
-
-    cursor.execute('SELECT status, premium FROM users WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
-    if chat_type == 'private':
-        if user[0] == 'pending':
-            await message.answer("Hello, I'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 Verify Now:\nhttps://t.me/medcontentbotinformation/4\n\nYou will be granted access only after verification!")
-            await notify_admins(user_id, username)
-        elif user[0] == 'approved':
-            if user[1]:
-                await get_all_files(message)  # If user is approved and premium, send files directly
-            else:
-                await message.answer("You have access only in group chats. Upgrade to premium to interact with the bot in private!")
-        elif user[0] == 'rejected':
-            await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
-    else:
-        if user[0] == 'approved':
-            await message.answer("Welcome! You have been given access to the bot 🙌")
-            if not await is_user_member(user_id):
-                join_message = "Join our backup channels to remain connected ✊\n\nAfter joining 👉 /start\n"
-                keyboard = InlineKeyboardMarkup(row_width=1)
-                for channel in REQUIRED_CHANNELS:
-                    button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
-                    keyboard.add(button)
-                await message.reply(join_message, reply_markup=keyboard)
-            else:
-                await send_ui(message.chat.id)  # Send UI for group users
-        elif user[0] == 'rejected':
-            await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
+    if user[0] == 'pending':
+        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 Verify Now:\nhttps://t.me/medcontentbotinformation/4>\n\nYou will be granted access only after verification!")
+        await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
+    elif user[0] == 'approved':
+        await message.answer("Welcome! You have been given access to the bot 🙌")
+        if not await is_user_member(user_id):
+            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
+            await asyncio.sleep(3)
+            await bot.delete_message(message.chat.id, sticker_msg.message_id)
+            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n\nAfter joining 👉 /start\n"
+            keyboard = InlineKeyboardMarkup(row_width=1)
+            for channel in REQUIRED_CHANNELS:
+                button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
+                keyboard.add(button)
+            await message.reply(join_message, reply_markup=keyboard)
+        else:
+            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
+            await asyncio.sleep(2)
+            await bot.delete_message(message.chat.id, sticker_msg.message_id)
+            await send_ui(message.chat.id)
+    elif user[0] == 'rejected':
+        await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
 
 
 # Approve handler
@@ -684,28 +662,41 @@ async def delete_folder(message: types.Message):
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
-    chat_type = message.chat.type
 
-    # Check if the user is premium if the request is in private
-    cursor.execute('SELECT premium FROM users WHERE user_id = ?', (user_id,))
-    is_premium = cursor.fetchone()
+    cursor.execute('SELECT status, premium, last_download FROM users WHERE user_id = ?', (user_id,))
+    user_info = cursor.fetchone()
 
-    if chat_type == 'private' and not is_premium[0]:
-        await message.reply("To download files in private, please upgrade to premium.")
+    if not user_info or user_info[0] != 'approved':
+        await message.reply("You are not authorized to download content. Please wait for admin approval.")
         return
 
-    if chat_type == 'group':
-        bot_username = (await bot.get_me()).username
-        inline_button = InlineKeyboardMarkup().add(InlineKeyboardButton("📩 Get Files in PM", url=f"https://t.me/{bot_username}?start=download_{user_id}"))
-        await message.reply("Files will be sent in your private message.", reply_markup=inline_button)
+    user_status, is_premium, last_download = user_info
+
+    # Check if the user is a member of the required channels
+    if not await is_user_member(user_id):
+        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
+        for channel in REQUIRED_CHANNELS:
+            join_message += f"{channel}\n"
+        await message.reply(join_message)
         return
 
-    # Proceed with file downloading in private for premium users or redirected users
+    # Check the time since the last download
+    current_time = datetime.now()
+    time_interval = timedelta(minutes=2) if is_premium else timedelta(minutes=10)
+
+    if last_download:
+        last_download_time = datetime.strptime(last_download, "%Y-%m-%d %H:%M:%S")
+        if current_time - last_download_time < time_interval:
+            wait_time = (last_download_time + time_interval) - current_time
+            await message.reply(f"Please wait {wait_time.seconds // 60} minutes and {wait_time.seconds % 60} seconds before downloading again.")
+            return
+
     folder_name = message.get_args()
     if not folder_name:
         await message.reply("Please specify a folder name.")
         return
 
+    # Get the folder ID, premium status, and download count
     cursor.execute('SELECT id, premium FROM folders WHERE name = ?', (folder_name,))
     folder_info = cursor.fetchone()
 
@@ -715,30 +706,45 @@ async def get_all_files(message: types.Message):
 
     folder_id, is_premium_folder = folder_info
 
-    if is_premium_folder and not is_premium[0]:
+    # Check if the folder is premium and if the user is allowed to access it
+    if is_premium_folder and not is_premium:
         await message.reply("This folder is for premium users only. Please upgrade to access it.")
         return
 
+    # Increment the download count
+    cursor.execute('''
+    UPDATE folders
+    SET download_count = download_count + 1
+    WHERE id = ?
+    ''', (folder_id,))
+    conn.commit()
+
+    # Get the file IDs, names, and captions in the folder
     cursor.execute('SELECT file_id, file_name, caption FROM files WHERE folder_id = ?', (folder_id,))
     files = cursor.fetchall()
 
     if files:
+        # Determine the time to delete messages based on the number of files
+        num_files = len(files)
+        if num_files <= 100:
+            delete_time = 180  # 3 minutes in seconds
+        elif num_files <= 200:
+            delete_time = 360  # 6 minutes in seconds
+        elif num_files <= 300:
+            delete_time = 540  # 9 minutes in seconds
+        else:
+            delete_time = 600  # Default to 10 minutes if more than 300 files
+
         messages_to_delete = []
         for file in files:
             sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
             messages_to_delete.append(sent_message.message_id)
 
-        file_count = len(files)
-        deletion_time = 180  # Default to 3 minutes
+        # Notify the user that files will be deleted in a specified time
+        warning_message = await message.reply(f"The files will be deleted in {delete_time // 60} minutes.")
 
-        if 100 < file_count <= 200:
-            deletion_time = 360  # 6 minutes
-        elif 200 < file_count <= 300:
-            deletion_time = 540  # 9 minutes
-
-        warning_message = await message.reply(f"The files will be deleted in {deletion_time // 60} minutes.")
-
-        await asyncio.sleep(deletion_time)
+        # Schedule deletion of messages after the calculated time
+        await asyncio.sleep(delete_time)
 
         for message_id in messages_to_delete:
             try:
@@ -746,13 +752,21 @@ async def get_all_files(message: types.Message):
             except exceptions.MessageToDeleteNotFound:
                 continue
 
+        # Edit the warning message to indicate files have been deleted
         try:
             await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
         except MessageNotModified:
             pass
+
+        # Update the last download time for the user
+        cursor.execute('''
+        UPDATE users
+        SET last_download = ?
+        WHERE user_id = ?
+        ''', (current_time.strftime("%Y-%m-%d %H:%M:%S"), user_id))
+        conn.commit()
     else:
         await message.reply("No files found in the specified folder.")
-
 
 # command to broadcast messages to users (Admin only)
 @dp.message_handler(commands=['broadcast'])
