@@ -300,8 +300,6 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     except exceptions.MessageNotModified:
         pass  # Handle the exception gracefully by ignoring it"""
 
-from datetime import datetime
-
 async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
     # Fetch the number of files and folders
     cursor.execute('SELECT COUNT(*) FROM folders')
@@ -333,6 +331,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     expiration_date_str = "Unknown"
     if premium_expiration:
         try:
+            # Assuming the premium_expiration is stored in a format like 'YYYY-MM-DD HH:MM:SS'
             premium_expiration = datetime.strptime(premium_expiration, '%Y-%m-%d %H:%M:%S')
             expiration_date_str = premium_expiration.strftime('%Y-%m-%d')
         except ValueError:
