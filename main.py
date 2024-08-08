@@ -138,9 +138,35 @@ if not column_exists(cursor, 'users', 'premium'):
     ''')
     conn.commit()
 
+# Add 'download_count' column if it doesn't exist
+if not column_exists(cursor, 'folders', 'download_count'):
+    cursor.execute('''
+    ALTER TABLE folders ADD COLUMN download_count INTEGER DEFAULT 0
+    ''')
+    conn.commit()
+
+# Add 'last_download' column if it doesn't exist
+if not column_exists(cursor, 'users', 'last_download'):
+    cursor.execute('''
+    ALTER TABLE users ADD COLUMN last_download DATETIME
+    ''')
+    conn.commit()
+
 # Global dictionary to track the current upload folder for each admin
 # So that all admins can upload files simultaneously
 current_upload_folders = {}
+
+# Ensure admins are always premium
+def ensure_admins_premium():
+    for admin_id in ADMIN_IDS:
+        cursor.execute('''
+            INSERT OR REPLACE INTO users (user_id, premium, premium_expiration)
+            VALUES (?, 1, ?)
+        ''', (admin_id, datetime.max))
+        conn.commit()
+
+# Call this function when your bot starts
+ensure_admins_premium()
 
 # Function to set the current upload folder for a user
 def set_current_upload_folder(user_id, folder_name):
@@ -150,8 +176,34 @@ def set_current_upload_folder(user_id, folder_name):
 def get_current_upload_folder(user_id):
     return current_upload_folders.get(user_id)
 
+# set premium status for a folder
+@dp.message_handler(commands=['folder'])
+async def set_premium_status(message: types.Message):
+    # Split the message to get the folder ID and the new premium status
+    try:
+        parts = message.text.split()
+        folder_id = int(parts[1])
+        premium_status = int(parts[2])
+        
+        if premium_status not in (0, 1):
+            raise ValueError("Invalid premium status. Use 0 for non-premium and 1 for premium.")
+        
+        # Update the premium status in the database
+        cursor.execute('''
+        UPDATE folders
+        SET premium = ?
+        WHERE id = ?
+        ''', (premium_status, folder_id))
+        conn.commit()
+
+        await message.reply(f"Folder ID {folder_id} premium status set to {premium_status}.")
+    except (IndexError, ValueError) as e:
+        await message.reply("Usage: /setpremium <folder_id> <0 or 1>\nExample: /setpremium 123 1")
+    except sqlite3.Error as e:
+        await message.reply(f"An error occurred while updating the folder: {e}")
+
 # Set premium status for a user
-@dp.message_handler(commands=['setpremium'])
+@dp.message_handler(commands=['user'])
 async def set_premium(message: types.Message):
     if str(message.from_user.id) in ADMIN_IDS:
         args = message.get_args().split()
@@ -180,7 +232,7 @@ async def set_premium(message: types.Message):
             except exceptions.BotBlocked:
                 await message.reply(f"Could not notify user {user_id}, as they have blocked the bot.")
 
-            # Schedule task to remove premium after 30 days
+            # Schedule task to remove premium after 15 days
             asyncio.create_task(remove_premium_after_expiry(user_id, expiration_date))
 
         elif action == 'off':
@@ -242,6 +294,17 @@ async def is_user_member(user_id):
             logging.error(f"Error checking membership for channel {channel}: {e}")
             return False
     return True
+
+@dp.callback_query_handler(lambda c: c.data.startswith('download_'))
+async def process_callback(callback_query: types.CallbackQuery):
+    callback_data = callback_query.data.split('_')
+    target_user_id = int(callback_data[1])
+
+    if callback_query.from_user.id != target_user_id:
+        await callback_query.answer("Not for you!", show_alert=True)
+    else:
+        await callback_query.answer("Sending files in PM...", show_alert=True)
+        # Proceed to send files to the user via PM here
 
 """# The UI of the bot
 async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter=None):
@@ -387,32 +450,47 @@ def add_user_to_db(user_id):
 async def handle_start(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username
+    chat_type = message.chat.type
+    
+    # Add user to the database if not already present
     add_user_to_db(user_id)
-    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
+    
+    # Check the user's status and premium status
+    cursor.execute('SELECT status, premium FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
+    
+    if not user:
+        return
 
-    if user[0] == 'pending':
-        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 Verify Now:\nhttps://t.me/medcontentbotinformation/4>\n\nYou will be granted access only after verification!")
-        await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
-    elif user[0] == 'approved':
-        await message.answer("Welcome! You have been given access to the bot 🙌")
-        if not await is_user_member(user_id):
-            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-            await asyncio.sleep(3)
-            await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n\nAfter joining 👉 /start\n"
-            keyboard = InlineKeyboardMarkup(row_width=1)
-            for channel in REQUIRED_CHANNELS:
-                button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
-                keyboard.add(button)
-            await message.reply(join_message, reply_markup=keyboard)
-        else:
-            sticker_msg = await bot.send_sticker(message.chat.id, STICKER_ID)
-            await asyncio.sleep(2)
-            await bot.delete_message(message.chat.id, sticker_msg.message_id)
-            await send_ui(message.chat.id)
-    elif user[0] == 'rejected':
-        await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
+    user_status, is_premium = user
+
+    if chat_type == 'private':
+        if user_status == 'pending':
+            await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 Verify Now:\nhttps://t.me/medcontentbotinformation/4\n\nYou will be granted access only after verification!")
+            await notify_admins(user_id, username)
+        elif user_status == 'approved':
+            if is_premium:
+                await message.answer("Welcome! You have premium access to the bot 🙌")
+                await send_ui(message.chat.id)  # Send the UI for premium users
+            else:
+                await message.answer("You have access only in group chats. Upgrade to premium to interact with the bot in private!")
+        elif user_status == 'rejected':
+            await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
+    else:
+        if user_status == 'approved':
+            await message.answer("Welcome! You have been given access to the bot 🙌")
+            if not await is_user_member(user_id):
+                # Send channels to join for non-premium users
+                join_message = "Join our backup channels to remain connected ✊\n\nAfter joining 👉 /start\n"
+                keyboard = InlineKeyboardMarkup(row_width=1)
+                for channel in REQUIRED_CHANNELS:
+                    button = InlineKeyboardButton(text=channel, url=f"https://t.me/{channel.lstrip('@')}")
+                    keyboard.add(button)
+                await message.reply(join_message, reply_markup=keyboard)
+            else:
+                await send_ui(message.chat.id)  # Send UI for group users
+        elif user_status == 'rejected':
+            await message.answer("Your access request has been rejected. You cannot use this bot 😢\n\nIf you think this is a mistake, Contact Us: @MedContent_Adminbot")
 
 # Approve handler
 @dp.message_handler(lambda message: message.text.startswith('/approve_') and str(message.from_user.id) in ADMIN_IDS)
@@ -548,50 +626,6 @@ async def create_folder(message: types.Message):
 
         await message.reply(f"Folder '{folder_name}' created {'as a PREMIUM folder' if premium else ''} and set as the current upload folder.")
 
-# Command to delete a file by name (Admin only)
-@dp.message_handler(commands=['deletefile'])
-async def delete_file(message: types.Message):
-    user_id = message.from_user.id
-
-    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
-    user = cursor.fetchone()
-
-    if not user or user[0] != 'approved':
-        await message.reply("You are not authorized to delete files. Please wait for admin approval.")
-        return
-    
-    if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
-        for channel in REQUIRED_CHANNELS:
-            join_message += f"{channel}\n"
-        await message.reply(join_message)
-    else:
-        if str(message.from_user.id) not in ADMIN_IDS:
-            await message.reply("You are not authorized to delete files.")
-            return
-
-        file_name = message.get_args()
-        if not file_name:
-            await message.reply("Please specify a file name.")
-            return
-
-        # Get the message ID of the file to be deleted
-        cursor.execute('SELECT message_id FROM files WHERE file_name = ?', (file_name,))
-        message_id = cursor.fetchone()
-        if message_id:
-            message_id = message_id[0]
-
-            # Delete the file from the database
-            cursor.execute('DELETE FROM files WHERE file_name = ?', (file_name,))
-            conn.commit()
-
-            # Delete the message from the channel
-            await bot.delete_message(CHANNEL_ID, message_id)
-
-            await message.reply(f"File '{file_name}' deleted.")
-        else:
-            await message.reply("File not found.")
-
 # Command to delete a folder and its contents (Admin only)
 @dp.message_handler(commands=['deletefolder'])
 async def delete_folder(message: types.Message):
@@ -653,27 +687,32 @@ async def delete_folder(message: types.Message):
 @dp.message_handler(commands=['download'])
 async def get_all_files(message: types.Message):
     user_id = message.from_user.id
+    chat_type = message.chat.type
+    
+    # Check the user's premium status
+    cursor.execute('SELECT premium FROM users WHERE user_id = ?', (user_id,))
+    is_premium = cursor.fetchone()
 
-    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
-    user = cursor.fetchone()
-
-    if not user or user[0] != 'approved':
-        await message.reply("You are not authorized to download content. Please wait for admin approval.")
+    if not is_premium:
         return
 
-    if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
-        for channel in REQUIRED_CHANNELS:
-            join_message += f"{channel}\n"
-        await message.reply(join_message)
+    if chat_type == 'private' and not is_premium[0]:
+        await message.reply("To download files in private, please upgrade to premium.")
         return
 
+    if chat_type in ['group', 'supergroup']:
+        # Generate an inline button to send files via PM
+        bot_username = (await bot.get_me()).username
+        inline_button = InlineKeyboardMarkup().add(InlineKeyboardButton(f"📩 Get Files in PM", url=f"https://t.me/{bot_username}?start=download_{user_id}"))
+        await message.reply("Files will be sent in your private message.", reply_markup=inline_button)
+        return
+
+    # Proceed with file downloading in private for premium users
     folder_name = message.get_args()
     if not folder_name:
         await message.reply("Please specify a folder name.")
         return
 
-    # Get the folder ID and premium status
     cursor.execute('SELECT id, premium FROM folders WHERE name = ?', (folder_name,))
     folder_info = cursor.fetchone()
 
@@ -681,18 +720,12 @@ async def get_all_files(message: types.Message):
         await message.reply("Folder not found.")
         return
 
-    folder_id, is_premium = folder_info
+    folder_id, is_premium_folder = folder_info
 
-    # Check if the folder is premium and if the user is allowed to access it
-    if is_premium:
-        cursor.execute('SELECT premium FROM users WHERE user_id = ?', (user_id,))
-        is_premium_user = cursor.fetchone()
+    if is_premium_folder and not is_premium[0]:
+        await message.reply("This folder is for premium users only. Please upgrade to access it.")
+        return
 
-        if not is_premium_user or not is_premium_user[0]:
-            await message.reply("This folder is for premium users only. Please upgrade to access it.")
-            return
-
-    # Get the file IDs, names, and captions in the folder
     cursor.execute('SELECT file_id, file_name, caption FROM files WHERE folder_id = ?', (folder_id,))
     files = cursor.fetchall()
 
@@ -702,11 +735,17 @@ async def get_all_files(message: types.Message):
             sent_message = await bot.send_document(message.chat.id, file[0], caption=file[2])
             messages_to_delete.append(sent_message.message_id)
 
-        # Notify the user that files will be deleted in 10 minutes
         warning_message = await message.reply("The files will be deleted in 10 minutes.")
 
-        # Schedule deletion of messages after 10 minutes
-        await asyncio.sleep(600)  # 600 seconds = 10 minutes
+        file_count = len(files)
+        deletion_time = 180  # 3 minutes by default
+
+        if 100 < file_count <= 200:
+            deletion_time = 360  # 6 minutes
+        elif 200 < file_count <= 300:
+            deletion_time = 540  # 9 minutes
+
+        await asyncio.sleep(deletion_time)
 
         for message_id in messages_to_delete:
             try:
@@ -714,7 +753,6 @@ async def get_all_files(message: types.Message):
             except exceptions.MessageToDeleteNotFound:
                 continue
 
-        # Edit the warning message to indicate files have been deleted
         try:
             await bot.edit_message_text("Files deleted.", chat_id=message.chat.id, message_id=warning_message.message_id)
         except MessageNotModified:
@@ -936,6 +974,7 @@ async def process_callback(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
 
 # get the list of all (Admin Only)
+# Get the list of all folders, premium folders, users, and download counts (Admin Only)
 @dp.message_handler(commands=['list'])
 async def list_all(message: types.Message):
     user_id = message.from_user.id
@@ -958,12 +997,12 @@ async def list_all(message: types.Message):
             return
         
     try:
-        # Fetch all folders
-        cursor.execute('SELECT id, name FROM folders')
+        # Fetch all folders with download counts
+        cursor.execute('SELECT id, name, download_count FROM folders')
         folders = cursor.fetchall()
 
-        # Fetch all premium folders
-        cursor.execute('SELECT id, name FROM folders WHERE premium = 1')
+        # Fetch all premium folders with download counts
+        cursor.execute('SELECT id, name, download_count FROM folders WHERE premium = 1')
         premium_folders = cursor.fetchall()
 
         # Fetch all users
@@ -977,13 +1016,13 @@ async def list_all(message: types.Message):
         # Prepare the response message
         response = "<b>Folders:</b>\n"
         if folders:
-            response += "\n".join([f"- {folder[1]} (ID: {folder[0]})" for folder in folders])
+            response += "\n".join([f"- {folder[1]} (ID: {folder[0]}, Downloads: {folder[2]})" for folder in folders])
         else:
             response += "No folders found."
 
         response += "\n\n<b>Premium Folders:</b>\n"
         if premium_folders:
-            response += "\n".join([f"- {folder[1]} (ID: {folder[0]})" for folder in premium_folders])
+            response += "\n".join([f"- {folder[1]} (ID: {folder[0]}, Downloads: {folder[2]})" for folder in premium_folders])
         else:
             response += "No premium folders found."
 
@@ -1085,46 +1124,6 @@ async def rename_folder(message: types.Message):
         conn.commit()
         
         await message.reply(f"Folder '{current_name}' has been renamed to '{new_name}'.")
-
-# Command to rename a file (Admin only)
-@dp.message_handler(commands=['renamefile'])
-async def rename_file(message: types.Message):
-    user_id = message.from_user.id
-
-    cursor.execute('SELECT status FROM users WHERE user_id = ?', (user_id,))
-    user = cursor.fetchone()
-
-    if not user or user[0] != 'approved':
-        await message.reply("You are not authorized to rename files. Please wait for admin approval.")
-        return
-    
-    if not await is_user_member(user_id):
-        join_message = "Welcome to The Medical Content Bot ✨\n\nI have the ever-growing archive of Medical content 👾\n\nJoin our backup channels to remain connected ✊\n"
-        for channel in REQUIRED_CHANNELS:
-            join_message += f"{channel}\n"
-        await message.reply(join_message)
-    else:
-        if str(message.from_user.id) not in ADMIN_IDS:
-            await message.reply("You are not authorized to rename files.")
-            return
-
-        args = message.get_args().split(',')
-        if len(args) != 2:
-            await message.reply("Please specify the current file name and the new file name in the format: /renamefile <current_name>,<new_name>")
-            return
-
-        current_name, new_name = args
-
-        # Check if the file with the current name exists
-        cursor.execute('SELECT id FROM files WHERE file_name = ?', (current_name,))
-        file_id = cursor.fetchone()
-        if file_id:
-            # Update the file name in the database
-            cursor.execute('UPDATE files SET file_name = ? WHERE id = ?', (new_name, file_id[0]))
-            conn.commit()
-            await message.reply(f"File '{current_name}' has been renamed to '{new_name}'.")
-        else:
-            await message.reply("File not found.")
 
 # Set up webhook
 async def on_startup(dispatcher):
