@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS current_caption (
 ''')
 conn.commit()
 
+# Add 'premium_expiration' column if it doesn't exist
+if not column_exists(cursor, 'users', 'premium_expiration'):
+    cursor.execute('''
+    ALTER TABLE users ADD COLUMN premium_expiration DATETIME
+    ''')
+    conn.commit()
+
 # Add 'approved' column if it doesn't exist
 if not column_exists(cursor, 'users', 'approved'):
     cursor.execute('''
@@ -158,17 +165,54 @@ async def set_premium(message: types.Message):
         action = action.lower()
 
         if action == 'on':
-            cursor.execute('UPDATE users SET premium = 1 WHERE user_id = ?', (user_id,))
+            expiration_date = datetime.now() + timedelta(days=30)
+            cursor.execute('''
+                UPDATE users 
+                SET premium = 1, premium_expiration = ? 
+                WHERE user_id = ?
+            ''', (expiration_date, user_id))
             conn.commit()
-            await message.reply(f"User {user_id} has been marked as premium.")
+            
+            await message.reply(f"User {user_id} has been marked as premium until {expiration_date}.")
+            
+            try:
+                await bot.send_message(user_id, "Congratulations! You have been granted premium status for 30 days.")
+            except exceptions.BotBlocked:
+                await message.reply(f"Could not notify user {user_id}, as they have blocked the bot.")
+
+            # Schedule task to remove premium after 30 days
+            asyncio.create_task(remove_premium_after_expiry(user_id, expiration_date))
+
         elif action == 'off':
-            cursor.execute('UPDATE users SET premium = 0 WHERE user_id = ?', (user_id,))
+            cursor.execute('''
+                UPDATE users 
+                SET premium = 0, premium_expiration = NULL 
+                WHERE user_id = ?
+            ''', (user_id,))
             conn.commit()
+            
             await message.reply(f"User {user_id} has been removed from premium status.")
         else:
             await message.reply("Invalid action. Use 'on' to set premium or 'off' to remove premium.")
     else:
         await message.reply("You are not authorized to perform this action.")
+
+async def remove_premium_after_expiry(user_id: int, expiration_date: datetime):
+    now = datetime.now()
+    sleep_time = (expiration_date - now).total_seconds()
+    await asyncio.sleep(sleep_time)
+    
+    cursor.execute('''
+        UPDATE users 
+        SET premium = 0, premium_expiration = NULL 
+        WHERE user_id = ? AND premium_expiration <= ?
+    ''', (user_id, datetime.now()))
+    conn.commit()
+    
+    try:
+        await bot.send_message(user_id, "Your premium status has expired.")
+    except exceptions.BotBlocked:
+        logging.warning(f"Could not notify user {user_id} about premium expiration, as they have blocked the bot.")
 
 # Notifies Admins for approve/reject permission of the bot for new users
 async def notify_admins(user_id, username):
@@ -285,10 +329,12 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
     )
 
-    # Check if the user is a premium user
-    cursor.execute('SELECT premium FROM users WHERE user_id = ?', (chat_id,))
-    is_premium_user = cursor.fetchone()
-    is_premium_user = is_premium_user and is_premium_user[0] == 1
+    # Check if the user is a premium user and fetch the premium expiration date
+    cursor.execute('SELECT premium, premium_expiration FROM users WHERE user_id = ?', (chat_id,))
+    user_data = cursor.fetchone()
+
+    is_premium_user = user_data and user_data[0] == 1
+    premium_expiration = user_data[1] if is_premium_user else None
 
     # Fetch and list all folders, including premium status
     cursor.execute('SELECT name, premium FROM folders WHERE parent_id IS NULL ORDER BY name')
@@ -297,9 +343,13 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
     # Add folders to the text with appropriate labeling
     for folder_name, premium in folders:
         if is_premium_user or not premium:
+            if is_premium_user:
+                expiration_date_str = premium_expiration.strftime('%Y-%m-%d') if premium_expiration else 'Unknown'
+                text += f"|-🥳 Premium User! till {expiration_date_str}\n\n"
             text += f"|-📒 `{folder_name}`\n"
         else:
-            text += f"|-📒 `{folder_name}` (Premium)\n"
+            text += "|-🌟 [Upgrade to Premium](https://t.me/MedContent_Adminbot)\n\n"
+            text += f"|-📦 `{folder_name}` (Premium)\n"
 
     text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Please share any files that you may think are useful to others :D` - [Share](https://t.me/MedContent_Adminbot)"
 
