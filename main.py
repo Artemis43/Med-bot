@@ -222,7 +222,7 @@ async def notify_admins(user_id, username):
     try:
         await bot.send_message(
             first_admin_id,
-            f"User @{username} (ID: <code>{user_id}</code>) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
+            f"User @{username} (ID: {user_id}) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
         )
     except exceptions.BotBlocked:
         logging.warning(f"Admin {first_admin_id} has blocked the bot.")
@@ -392,7 +392,7 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 <a href=https://t.me/medcontentbotinformation/4>Verify Now</a>\n\nYou will be granted access only after verification!")
+        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 Verify Now:\nhttps://t.me/medcontentbotinformation/4>\n\nYou will be granted access only after verification!")
         await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 🙌")
@@ -438,7 +438,7 @@ async def reject_user(message: types.Message):
     conn.commit()
     await message.answer(f"User {user_id} has been rejected.")
     try:
-        await bot.send_message(user_id, "You have been rejected from using the bot 🫤\n\nIf you think this is a mistake, **Contact Us:** [Here](https://t.me/MedContent_Adminbot)")
+        await bot.send_message(user_id, "You have been rejected from using the bot 🫤\n\nIf you think this is a mistake, **Contact Us:** @MedContent_Adminbot")
     except exceptions.BotBlocked:
         logging.warning(f"User {user_id} has blocked the bot.")
     except exceptions.ChatNotFound:
