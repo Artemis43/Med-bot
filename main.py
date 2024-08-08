@@ -222,7 +222,7 @@ async def notify_admins(user_id, username):
     try:
         await bot.send_message(
             first_admin_id,
-            f"User @{username} (ID: `{user_id}`) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
+            f"User @{username} (ID: <code>{user_id}</code>) is requesting access to the bot. Approve?\n\n/approve_{user_id}\n\n/reject_{user_id}"
         )
     except exceptions.BotBlocked:
         logging.warning(f"Admin {first_admin_id} has blocked the bot.")
@@ -347,7 +347,7 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         text += f"🥳 **You are a Premium User!**\n\n"
         #text += f"**Your premium status expires on:** `{expiration_date_str}`\n\n"
     else:
-        text += f"🔑 **[Upgrade to Premium](https://t.me/medcontentbotinformation/2)**\n\n"
+        text += f"🌟 **[Upgrade to Premium](https://t.me/medcontentbotinformation/2)**\n\n"
 
     text += f"**List of Folders 🔽**\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n"
 
@@ -360,9 +360,9 @@ async def send_ui(chat_id, message_id=None, current_folder=None, selected_letter
         if is_premium_user or not premium:
             text += f"|-📒 `{folder_name}`\n"
         else:
-            text += f"|-🔒 `{folder_name}` (Premium)\n"
+            text += f"|-📒 `{folder_name}` (Premium)\n"
 
-    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Share files, Get Rewards :D` - [Share](https://t.me/medcontentbotinformation/3)"
+    text += "\n\n\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\n\n`Share files, Get Rewards :D`\n[Share Now](https://t.me/medcontentbotinformation/3)"
 
     try:
         if message_id:
@@ -392,7 +392,7 @@ async def handle_start(message: types.Message):
     user = cursor.fetchone()
 
     if user[0] == 'pending':
-        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\nVerify: [Here](https://t.me/medcontentbotinformation/4)\n\nYou will be granted access only after verification!")
+        await message.answer("Hello,\nI'm The Medical Content Bot ✨\n\nTo prevent scammers and copyright strikes, we allow only Medical students to use this bot 🙃\n\n👉 <a href=https://t.me/medcontentbotinformation/4>Verify Now</a>\n\nYou will be granted access only after verification!")
         await notify_admins(user_id, username)  # Ensure this is after the initial message to the user
     elif user[0] == 'approved':
         await message.answer("Welcome! You have been given access to the bot 🙌")
